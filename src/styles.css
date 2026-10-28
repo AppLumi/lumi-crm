@@ -94,11 +94,12 @@ kbd { font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 600; pad
 .lateral::after { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; border-radius: inherit;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 22%), linear-gradient(105deg, transparent 60%, rgba(255, 255, 255, 0.28) 74%, transparent 86%); }
 
-.marca { display: flex; align-items: center; gap: 10px; padding: 2px 4px 4px 6px; }
-.marca .logo { width: 40px; height: 40px; flex: none; border-radius: 14px; display: grid; place-items: center;
-  background: linear-gradient(145deg, #fff, rgba(255, 255, 255, 0.55)); box-shadow: var(--brilho), 0 6px 16px -8px rgba(6, 27, 74, 0.45); }
-.nome-marca { display: flex; flex-direction: column; font-family: 'Lexend', sans-serif; font-size: 19px; font-weight: 600; color: var(--noite); line-height: 1; white-space: nowrap; }
-.nome-marca small { font-family: 'DM Sans', sans-serif; font-size: 10px; letter-spacing: 0.18em; margin-top: 4px; color: var(--lima-texto); font-weight: 700; }
+.marca { display: flex; align-items: center; gap: 10px; padding: 4px 4px 6px 8px; min-height: 44px; }
+.marca .logo-marca { display: none; }
+.nome-marca { display: flex; align-items: center; gap: 9px; }
+.nome-marca small { font-size: 9.5px; letter-spacing: 0.16em; font-weight: 700; color: var(--lima-texto); padding: 3px 7px 2px; border-radius: 7px;
+  background: rgba(142, 224, 63, 0.18); box-shadow: inset 0 0 0 1px rgba(142, 224, 63, 0.35); }
+.marca .logo-svg { display: block; filter: drop-shadow(0 2px 6px rgba(5, 27, 74, 0.12)); }
 .recolher { margin-left: auto; width: 30px; height: 30px; border-radius: 10px; border: 0; display: grid; place-items: center; cursor: pointer; color: var(--tinta-2);
   background: rgba(255, 255, 255, 0.5); box-shadow: var(--brilho), 0 0 0 1px rgba(6, 27, 74, 0.06); transition: transform 0.3s var(--mola), background 0.2s; }
 .recolher:hover { background: #fff; transform: scale(1.08); }
@@ -149,6 +150,7 @@ kbd { font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 600; pad
 /* menu recolhido: trilho de ícones com dicas */
 .recolhido .lateral { padding: 16px 10px 12px; }
 .recolhido .marca { flex-direction: column; padding: 2px 0 4px; }
+.recolhido .marca .logo-marca { display: grid; place-items: center; width: 52px; height: 48px; }
 .recolhido .recolher { margin: 4px 0 0; }
 .recolhido .nome-marca, .recolhido .lateral .rotulo, .recolhido .busca-rapida kbd, .recolhido .pessoa .sair { display: none; }
 .recolhido .grupo-titulo { opacity: 0; height: 10px; padding: 0; }
@@ -345,9 +347,85 @@ textarea { min-height: 110px; resize: vertical; }
 .barra-movel { display: none; }
 
 /* ---------- login e páginas públicas ---------- */
-.tela-login { min-height: 100vh; display: grid; place-items: center; padding: 20px; position: relative; overflow: hidden;
-  background: radial-gradient(800px 600px at 15% 10%, rgba(59, 114, 217, 0.55), transparent 60%), radial-gradient(700px 500px at 90% 90%, rgba(142, 224, 63, 0.25), transparent 60%), var(--fundo-escuro); }
-.tela-login .cartao { width: min(400px, 100%); padding: 30px; background: rgba(255, 255, 255, 0.82); animation: subir 0.5s var(--mola) both; }
+.tela-login { min-height: 100vh; display: grid; place-items: center; padding: 28px 16px; position: relative; overflow: hidden; isolation: isolate; }
+.login-coluna { width: min(420px, 100%); display: flex; flex-direction: column; align-items: center; gap: 26px; }
+.login-logo { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.login-logo .logo-svg { max-width: 100%; height: auto; filter: drop-shadow(0 10px 24px rgba(5, 27, 74, 0.16)); }
+.login-sub { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.32em; text-transform: uppercase; color: var(--tinta-3);
+  animation: espaco 1.2s 1.1s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes espaco { from { opacity: 0; letter-spacing: 0.9em; filter: blur(4px); } }
+.tela-login .cartao { width: 100%; padding: 30px; background: rgba(255, 255, 255, 0.66); animation: subir 0.8s 0.75s var(--mola) both; }
+.login-cartao { --mx: 50%; --my: 0%; overflow: hidden; }
+.login-cartao::before { content: ''; position: absolute; inset: 0; pointer-events: none; border-radius: inherit; opacity: 0; transition: opacity 0.4s;
+  background: radial-gradient(320px circle at var(--mx) var(--my), rgba(255, 255, 255, 0.85), rgba(142, 224, 63, 0.10) 40%, transparent 65%); }
+.login-cartao:hover::before { opacity: 1; }
+.login-cartao > * { position: relative; }
+.login-cartao.tremer { animation: tremer 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
+@keyframes tremer { 20%, 80% { transform: translateX(-3px); } 30%, 50%, 70% { transform: translateX(6px); } 40%, 60% { transform: translateX(-6px); } }
+.btn.largo { width: 100%; justify-content: center; padding: 12px 15px; margin-top: 4px; }
+.btn-texto { display: block; margin: 12px auto 0; border: 0; background: none; color: var(--tinta-2); font-weight: 600; cursor: pointer; padding: 6px 10px; border-radius: 10px; }
+.btn-texto:hover { background: rgba(6, 27, 74, 0.05); color: var(--noite); }
+.login-rodape { margin: 0; font-size: 12px; color: var(--tinta-3); animation: aparecer 1s 1.4s both; }
+.girando.claro { border-color: rgba(255, 255, 255, 0.3); border-top-color: #fff; width: 14px; height: 14px; }
+
+/* ---------- logo animado ---------- */
+.logo-svg .lamina, .logo-svg .letra, .logo-svg .estrela, .logo-svg .reflexo { transform-box: fill-box; transform-origin: center; }
+.logo-svg .reflexo { opacity: 0; }
+/* entrada: as lâminas chegam de três direções, as letras sobem, a estrela acende e um reflexo passa */
+.anima-entrada .lamina { animation: lamina-entra 1.1s cubic-bezier(0.2, 0.9, 0.25, 1.15) both; }
+.anima-entrada .l1 { --de: translate(-180px, -140px) rotate(-18deg); animation-delay: 0.05s; }
+.anima-entrada .l2 { --de: translate(-160px, 180px) rotate(14deg); animation-delay: 0.17s; }
+.anima-entrada .l3 { --de: translate(200px, 150px) rotate(20deg); animation-delay: 0.29s; }
+@keyframes lamina-entra { from { opacity: 0; transform: var(--de) scale(0.7); filter: blur(10px); } 60% { opacity: 1; filter: blur(0); } to { opacity: 1; transform: none; } }
+.anima-entrada .letra { animation: letra-sobe 0.9s cubic-bezier(0.2, 0.9, 0.25, 1.2) both; }
+.anima-entrada .letra:nth-child(1) { animation-delay: 0.45s; }
+.anima-entrada .letra:nth-child(2) { animation-delay: 0.53s; }
+.anima-entrada .letra:nth-child(3) { animation-delay: 0.61s; }
+.anima-entrada .letra:nth-child(4) { animation-delay: 0.69s; }
+@keyframes letra-sobe { from { opacity: 0; transform: translateY(160px) scaleY(0.6); } to { opacity: 1; transform: none; } }
+.anima-entrada .estrela { animation: estrela-acende 1s 0.95s cubic-bezier(0.2, 0.9, 0.25, 1.4) both, cintilar 3.4s 2.2s ease-in-out infinite; }
+@keyframes estrela-acende { from { opacity: 0; transform: scale(0) rotate(-200deg); } 70% { opacity: 1; transform: scale(1.5) rotate(15deg); } to { opacity: 1; transform: none; } }
+@keyframes cintilar { 0%, 70%, 100% { transform: none; filter: none; } 80% { transform: scale(1.35) rotate(45deg); filter: drop-shadow(0 0 18px rgba(80, 140, 255, 0.9)); } 90% { transform: scale(0.9); } }
+.anima-entrada .reflexo { animation: reflexo 4.6s 1.5s ease-in-out infinite; }
+@keyframes reflexo { 0% { opacity: 1; transform: translateX(0); } 40% { opacity: 1; transform: translateX(1500px); } 41%, 100% { opacity: 0; transform: translateX(1500px); } }
+/* respiração: as lâminas se aproximam e se afastam do centro, como uma luz pulsando */
+.anima-respira .lamina { animation: lamina-respira 1.8s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
+.anima-respira .l1 { --para: translate(36px, 34px); }
+.anima-respira .l2 { --para: translate(34px, -26px); animation-delay: 0.15s; }
+.anima-respira .l3 { --para: translate(-38px, -24px); animation-delay: 0.3s; }
+@keyframes lamina-respira { 0%, 100% { transform: none; opacity: 1; } 50% { transform: var(--para) scale(0.94); opacity: 0.75; } }
+
+/* ---------- splash (abertura e depois do login) ---------- */
+.splash { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; overflow: hidden; isolation: isolate; animation: aparecer 0.35s ease both; }
+.splash .aurora { position: absolute; }
+.splash-centro { position: relative; display: flex; flex-direction: column; align-items: center; gap: 22px; }
+.splash-halo { position: absolute; top: -70px; width: 260px; height: 260px; border-radius: 50%; z-index: -1;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.4) 45%, transparent 70%); animation: halo 1.8s ease-in-out infinite; }
+@keyframes halo { 50% { transform: scale(1.12); opacity: 0.8; } }
+.splash-centro > .logo-svg:first-of-type { filter: drop-shadow(0 18px 30px rgba(5, 27, 74, 0.22)); }
+.splash-nome { margin-top: -4px; }
+.splash-barra { width: 150px; height: 5px; border-radius: 999px; overflow: hidden; background: rgba(5, 27, 74, 0.08); box-shadow: inset 0 1px 2px rgba(5, 27, 74, 0.1); }
+.splash-barra i { display: block; width: 40%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, transparent, var(--azul-claro), var(--lima), transparent);
+  animation: barra 1.15s ease-in-out infinite; }
+@keyframes barra { from { transform: translateX(-110%); } to { transform: translateX(260%); } }
+.splash-msg { margin: 0; color: var(--tinta-3); font-size: 13px; }
+.splash.saindo { animation: splash-sai 0.75s cubic-bezier(0.6, 0, 0.3, 1) forwards; pointer-events: none; }
+.splash.saindo .splash-centro { animation: centro-sai 0.75s cubic-bezier(0.6, 0, 0.3, 1) forwards; }
+@keyframes splash-sai { 0% { opacity: 1; } 55% { opacity: 1; } 100% { opacity: 0; visibility: hidden; } }
+@keyframes centro-sai { to { transform: scale(1.6); opacity: 0; filter: blur(12px); } }
+
+/* o app aparece por trás do splash, saindo do desfoque */
+.revela { transform: scale(0.975); filter: blur(12px); opacity: 0.5; }
+.revela.ativo { transform: none; filter: none; opacity: 1; transition: transform 0.9s 0.15s cubic-bezier(0.2, 0.8, 0.2, 1), filter 0.8s 0.15s ease, opacity 0.6s 0.15s ease; }
+
+/* indicador entre telas */
+.carregando { min-height: 46vh; display: grid; place-content: center; justify-items: center; gap: 12px; }
+.carregando.visivel { animation: aparecer 0.3s ease both; }
+.carregando span { font-size: 13px; font-weight: 600; color: var(--tinta-3); letter-spacing: 0.02em; }
+.carregando b { animation: ponto 1.2s infinite; }
+.carregando b:nth-of-type(2) { animation-delay: 0.2s; }
+.carregando b:nth-of-type(3) { animation-delay: 0.4s; }
+@keyframes ponto { 0%, 60%, 100% { opacity: 0.2; } 30% { opacity: 1; } }
 .publica { min-height: 100vh; background: radial-gradient(900px 600px at 0% 0%, rgba(59, 114, 217, 0.22), transparent 60%), radial-gradient(700px 500px at 100% 100%, rgba(142, 224, 63, 0.2), transparent 60%), var(--fundo); padding: 32px 16px; }
 .publica .folha { max-width: 760px; margin: 0 auto; background: rgba(255, 255, 255, 0.9); border: 1px solid #fff; border-radius: 26px; box-shadow: var(--brilho), var(--sombra); overflow: hidden; }
 .publica .cabeca { background: radial-gradient(120% 140% at 0% 0%, #1e4fb8, var(--noite) 60%); color: #fff; padding: 30px 34px; }

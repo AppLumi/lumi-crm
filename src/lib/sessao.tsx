@@ -12,6 +12,9 @@ interface Ctx {
   sair: () => Promise<void>;
 }
 
+/** Marca que o próximo carregamento vem de um login, para o splash ficar um pouco mais. */
+export const MARCA_LOGIN = 'lumi-crm:veio-do-login';
+
 const SessaoCtx = createContext<Ctx | null>(null);
 
 export function SessaoProvider({ children }: { children: ReactNode }) {

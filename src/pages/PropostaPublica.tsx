@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { brl, data } from '../lib/formato';
+import Logo from '../components/Logo';
 
 interface Publica {
   versao: number; plano: 'starter' | 'premium'; vidas: number; preco_vida: number; mensal_tabela: number; desconto_pct: number; mensal: number;
@@ -44,10 +45,7 @@ export default function PropostaPublica() {
     <div className="publica">
       <article className="folha">
         <header className="cabeca">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <svg width="30" height="30" viewBox="0 0 64 64" aria-hidden="true"><path d="M8 10 L50 16 L31 29 Z" fill="#9DB0D0" /><path d="M31 29 L54 20 L36 52 Z" fill="#3B72D9" /><path d="M8 10 L31 29 L26 54 Z" fill="#fff" /></svg>
-            <strong style={{ fontFamily: 'Lexend', fontSize: 20 }}>lumi</strong>
-          </div>
+          <Logo altura={34} variante="claro" />
           <h1 style={{ marginTop: 22, fontSize: 26 }}>Proposta para {p.empresa}</h1>
           <p style={{ margin: '6px 0 0', color: 'var(--nevoa)' }}>Plano {plano} · versão {p.versao} · emitida em {data(p.criado_em)} · válida até {data(p.validade)}</p>
         </header>

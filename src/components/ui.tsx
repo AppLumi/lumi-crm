@@ -43,9 +43,7 @@ export function Nota({ valor, titulo }: { valor: number; titulo?: string }) {
   );
 }
 
-export function Carregando() {
-  return <div className="vazio">Carregando…</div>;
-}
+export { Carregando } from './Splash';
 
 export function Vazio({ children }: { children: ReactNode }) {
   return <div className="vazio">{children}</div>;

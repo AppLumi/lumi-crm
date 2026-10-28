@@ -1,9 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useSessao } from '../lib/sessao';
 import Icone, { type NomeIcone } from './Icone';
 import Comando from './Comando';
+import Logo from './Logo';
+import { Carregando } from './Splash';
 
 type Contador = 'leads' | 'tarefas' | 'aprovacoes';
 interface Item { para: string; nome: string; icone: NomeIcone; contador?: Contador }
@@ -111,10 +113,8 @@ export default function Layout() {
 
       <aside className="lateral" onMouseMove={luz} aria-label="Menu principal">
         <div className="marca">
-          <span className="logo">
-            <svg width="22" height="22" viewBox="0 0 64 64" aria-hidden="true"><path d="M8 10 L50 16 L31 29 Z" fill="#9DB0D0" /><path d="M31 29 L54 20 L36 52 Z" fill="#3B72D9" /><path d="M8 10 L31 29 L26 54 Z" fill="#061B4A" /></svg>
-          </span>
-          <span className="nome-marca">lumi<small>CRM</small></span>
+          <span className="logo-marca"><Logo marca altura={30} /></span>
+          <span className="nome-marca"><Logo altura={24} /><small>CRM</small></span>
           <button className="recolher" onClick={() => setRecolhido((r) => !r)} aria-label={recolhido ? 'Expandir menu' : 'Recolher menu'} title={recolhido ? 'Expandir menu' : 'Recolher menu'}>
             <Icone nome={recolhido ? 'expandir' : 'recolher'} tamanho={16} />
           </button>
@@ -160,7 +160,7 @@ export default function Layout() {
       {dica && recolhido && <div className="dica" style={{ top: dica.y }} role="tooltip">{dica.texto}</div>}
 
       <main className="conteudo">
-        <div className="pagina" key={pathname}><Outlet /></div>
+        <div className="pagina" key={pathname}><Suspense fallback={<Carregando />}><Outlet /></Suspense></div>
       </main>
 
       <nav className="barra-movel" aria-label="Menu rápido">

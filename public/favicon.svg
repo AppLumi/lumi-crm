@@ -1,1 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#061B4A"/><path d="M17 18 L46 22 L33 31 Z" fill="#9DB0D0"/><path d="M33 31 L48 25 L36 46 Z" fill="#3B72D9"/><path d="M17 18 L33 31 L29 47 Z" fill="#fff"/><circle cx="49" cy="15" r="3" fill="#8EE03F"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-40 -30 730 730">
+  <defs>
+    <linearGradient id="a" x1="0" y1="0" x2="1" y2="0.15"><stop offset="0" stop-color="#051B4A"/><stop offset="1" stop-color="#051B4A" stop-opacity=".12"/></linearGradient>
+    <linearGradient id="b" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#051B4A"/><stop offset="1" stop-color="#051B4A" stop-opacity=".12"/></linearGradient>
+    <linearGradient id="c" x1="1" y1="0" x2="0.2" y2="1"><stop offset="0" stop-color="#051B4A"/><stop offset="1" stop-color="#051B4A" stop-opacity=".12"/></linearGradient>
+  </defs>
+  <path d="M55 10 L595 66 L402 303 L28 100 A50 50 0 0 1 55 10 Z" fill="url(#a)"/>
+  <path d="M0 125 H228 V622 A46 46 0 0 1 141 642 L0 368 Z" fill="url(#b)"/>
+  <path d="M577 195 A48 48 0 0 1 640 262 L380 635 L230 415 Z" fill="url(#c)"/>
+</svg>
