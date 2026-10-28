@@ -69,7 +69,7 @@ kbd { font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 600; pad
 .app { display: grid; grid-template-columns: 268px minmax(0, 1fr); min-height: 100vh; transition: grid-template-columns 0.45s var(--mola); }
 .app.recolhido { grid-template-columns: 92px minmax(0, 1fr); }
 .conteudo { padding: 30px 34px 56px 26px; min-width: 0; }
-.pagina { animation: surgir 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.pagina { animation: surgir 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; } /* "backwards": ao terminar, a página não fica com transformação, senão as janelas (position: fixed) ficam presas dentro dela */
 @keyframes surgir { from { opacity: 0; transform: translateY(8px); filter: blur(3px); } to { opacity: 1; transform: none; filter: none; } }
 .topo { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 22px; flex-wrap: wrap; }
 .topo p { margin: 6px 0 0; color: var(--tinta-2); }
