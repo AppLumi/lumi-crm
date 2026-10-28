@@ -28,8 +28,10 @@ const ORDEM = ['enviando', 'enviado', 'entregue', 'aberto', 'clicado'];
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).end();
+  const segredo = env('RESEND_WEBHOOK_SECRET', false);
+  if (!segredo) return res.status(503).json({ erro: 'RESEND_WEBHOOK_SECRET não configurado' });
   const corpo = await corpoCru(req);
-  const ok = assinaturaValida(env('RESEND_WEBHOOK_SECRET'), String(req.headers['svix-id'] ?? ''),
+  const ok = assinaturaValida(segredo, String(req.headers['svix-id'] ?? ''),
     String(req.headers['svix-timestamp'] ?? ''), corpo, String(req.headers['svix-signature'] ?? ''));
   if (!ok) return res.status(401).json({ erro: 'assinatura inválida' });
   const ev = JSON.parse(corpo) as { type: string; created_at: string; data: { email_id: string } };
