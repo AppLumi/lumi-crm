@@ -1,7 +1,7 @@
 // POST /api/leads — captura pública (site, landing pages, eventos, QR). Chamada pelo navegador do visitante.
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { admin, consultarCnpj, cors, emailValido, enviarEmail, esc, soDigitos, texto } from './_lib.js';
-import { cnpjValido, notaPerfil, PESOS_EVENTOS } from '../shared/pontuacao.js';
+import { cnpjValido, notaPerfil, PESOS_EVENTOS, pisoDaFaixa } from '../shared/pontuacao.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (cors(req, res)) return;
@@ -16,12 +16,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const cnpjBruto = soDigitos(b.cnpj);
   const cnpj = cnpjBruto && cnpjValido(cnpjBruto) ? cnpjBruto : null;
   const colab = Number(soDigitos(b.colaboradores)) || null;
+  // o site pergunta o porte em faixas ("51 a 200", "Mais de 1.000"): guardamos a faixa como foi
+  // informada e usamos o menor número dela só para a nota de perfil, sem inventar um total
+  const porte = texto(b.porte, 40);
+  const pisoFaixa = pisoDaFaixa(porte);
   const evento = texto(b.tipo, 40) ?? 'formulario_contato';
   const tipoEvento = evento in PESOS_EVENTOS ? evento : 'formulario_contato';
   const aceita = b.aceita_marketing === true || b.aceita_marketing === 'true' || b.aceita_marketing === 'on';
 
   const db = admin();
-  const enriquecimento = cnpj ? await consultarCnpj(cnpj) : null;
+  const cadastro = cnpj ? await consultarCnpj(cnpj) : null;
+  const enriquecimento = cadastro || porte ? { ...(cadastro ?? {}), ...(porte ? { porte_informado: porte } : {}) } : null;
 
   // mesmo e-mail nos últimos 90 dias = mesmo lead: soma o sinal em vez de duplicar
   let leadId: string | null = null;
@@ -35,14 +40,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!leadId) {
     const { data, error } = await db.from('leads').insert({
       nome, email, whatsapp, cnpj,
-      empresa: texto(b.empresa, 160) ?? (enriquecimento?.nome_fantasia as string) ?? (enriquecimento?.razao_social as string) ?? null,
+      empresa: texto(b.empresa, 160) ?? (cadastro?.nome_fantasia as string) ?? (cadastro?.razao_social as string) ?? null,
       cargo: texto(b.cargo, 120), colaboradores: colab, mensagem: texto(b.mensagem, 2000),
       origem: texto(b.origem, 60) ?? 'site', pagina: texto(b.pagina, 300), evento: texto(b.evento, 120),
       utm_source: texto(b.utm_source, 120), utm_medium: texto(b.utm_medium, 120), utm_campaign: texto(b.utm_campaign, 120),
       utm_content: texto(b.utm_content, 120), utm_term: texto(b.utm_term, 120),
       aceita_marketing: aceita, consentimento_em: aceita ? new Date().toISOString() : null,
       enriquecimento, dono,
-      nota_perfil: notaPerfil({ colaboradores: colab, cargo: texto(b.cargo), cnae: enriquecimento?.cnae as string, cnpjValido: !!cnpj, temWhatsapp: !!whatsapp }),
+      nota_perfil: notaPerfil({ colaboradores: colab ?? pisoFaixa, cargo: texto(b.cargo), cnae: cadastro?.cnae as string, cnpjValido: !!cnpj, temWhatsapp: !!whatsapp }),
     }).select('id').single();
     if (error) { console.error('lead:', error.message); return res.status(500).json({ erro: 'Não foi possível registrar agora' }); }
     leadId = data.id;
@@ -54,7 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const avisar = (process.env.NOTIFICAR_LEADS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
   if (avisar.length && process.env.RESEND_API_KEY) {
     const url = `${process.env.CRM_URL ?? 'https://crm.applumi.io'}/leads/${leadId}`;
-    const linhas = [`${nome}${texto(b.cargo) ? ` · ${texto(b.cargo)}` : ''}`, texto(b.empresa) ?? '', colab ? `${colab} colaboradores` : '', `Origem: ${texto(b.origem) ?? 'site'} · ${tipoEvento}`];
+    const linhas = [`${nome}${texto(b.cargo) ? ` · ${texto(b.cargo)}` : ''}`, texto(b.empresa) ?? '', colab ? `${colab} colaboradores` : porte ? `${porte} colaboradores` : '', `Origem: ${texto(b.origem) ?? 'site'} · ${tipoEvento}`];
     try {
       await enviarEmail({ para: avisar, assunto: `Novo lead: ${nome}${texto(b.empresa) ? ` (${texto(b.empresa)})` : ''}`,
         texto: `${linhas.filter(Boolean).join('\n')}\n\nAbrir no CRM: ${url}`,

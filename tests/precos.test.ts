@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { calcular } from '../shared/precos.js';
-import { cnpjValido, notaPerfil } from '../shared/pontuacao.js';
+import { cnpjValido, notaPerfil, pisoDaFaixa } from '../shared/pontuacao.js';
 
 describe('preços', () => {
   it('bate com a calculadora do site', () => {
@@ -33,5 +33,14 @@ describe('pontuação', () => {
   it('dá nota alta para RH de empresa grande', () => {
     expect(notaPerfil({ colaboradores: 1500, cargo: 'Diretora de RH', cnae: '8610101', cnpjValido: true, temWhatsapp: true })).toBe(100);
     expect(notaPerfil({ colaboradores: 10, cargo: 'estagiário' })).toBe(14);
+  });
+});
+
+describe('porte informado em faixa no site', () => {
+  it('usa o menor número da faixa só para a nota', () => {
+    expect(['1 a 50', '51 a 200', '201 a 500', '501 a 1.000', 'Mais de 1.000'].map(pisoDaFaixa)).toEqual([1, 51, 201, 501, 1000]);
+    expect(pisoDaFaixa('')).toBeNull();
+    expect(notaPerfil({ colaboradores: pisoDaFaixa('Mais de 1.000') })).toBe(40);
+    expect(notaPerfil({ colaboradores: pisoDaFaixa('201 a 500') })).toBe(32);
   });
 });

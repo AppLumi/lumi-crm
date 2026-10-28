@@ -25,6 +25,12 @@ export function notaPerfil(d: DadosPerfil): number {
   return Math.min(100, n);
 }
 
+/** Menor número de uma faixa de porte digitada como texto ("51 a 200", "Mais de 1.000"). */
+export function pisoDaFaixa(faixa: string | null | undefined): number | null {
+  const m = (faixa ?? '').match(/\d[\d.]*/);
+  return m ? Number(m[0].replace(/\./g, '')) || null : null;
+}
+
 export function cnpjValido(cnpj: string): boolean {
   const s = cnpj.replace(/\D/g, '');
   if (s.length !== 14 || /^(\d)\1+$/.test(s)) return false;

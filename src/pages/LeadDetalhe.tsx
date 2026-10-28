@@ -111,7 +111,7 @@ export default function LeadDetalhe() {
               <dt>WhatsApp</dt><dd>{lead.whatsapp ?? '—'}</dd>
               <dt>Empresa</dt><dd>{lead.empresa ?? '—'}</dd>
               <dt>CNPJ</dt><dd>{cnpjFmt(lead.cnpj)}</dd>
-              <dt>Colaboradores</dt><dd>{num(lead.colaboradores)}</dd>
+              <dt>Colaboradores</dt><dd>{lead.colaboradores ? num(lead.colaboradores) : enr.porte_informado ? `${enr.porte_informado} (informado no site)` : '—'}</dd>
               <dt>Origem</dt><dd>{nomeOrigem(lead.origem)}{lead.evento ? ` · ${lead.evento}` : ''}</dd>
               {lead.utm_campaign && <><dt>Campanha</dt><dd>{[lead.utm_source, lead.utm_medium, lead.utm_campaign].filter(Boolean).join(' / ')}</dd></>}
               {lead.pagina && <><dt>Página</dt><dd style={{ wordBreak: 'break-all' }}>{lead.pagina}</dd></>}
@@ -129,7 +129,7 @@ export default function LeadDetalhe() {
             {lead.mensagem && <><h3 style={{ marginTop: 14 }}>Mensagem</h3><p style={{ whiteSpace: 'pre-wrap' }}>{lead.mensagem}</p></>}
           </div>
 
-          {Object.keys(enr).length > 0 && (
+          {enr.razao_social && (
             <div className="cartao">
               <h2>Cadastro da empresa</h2>
               <dl className="dados" style={{ marginTop: 10 }}>

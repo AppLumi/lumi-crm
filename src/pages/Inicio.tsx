@@ -113,7 +113,7 @@ export default function Inicio() {
             <table className="tabela"><tbody>
               {quentes.map((l) => (
                 <tr key={l.id} className="clicavel" onClick={() => ir(`/leads/${l.id}`)}>
-                  <td><strong>{l.nome}</strong><div className="muted">{l.empresa ?? '—'}{l.colaboradores ? ` · ${l.colaboradores} colab.` : ''}</div></td>
+                  <td><strong>{l.nome}</strong><div className="muted">{l.empresa ?? '—'}{l.colaboradores ? ` · ${l.colaboradores} colab.` : l.enriquecimento?.porte_informado ? ` · ${l.enriquecimento.porte_informado} colab.` : ''}</div></td>
                   <td><Nota valor={l.nota_perfil} titulo="Perfil" /></td>
                   <td><Nota valor={l.nota_interesse} titulo="Interesse" /></td>
                 </tr>

@@ -117,7 +117,7 @@ export default function Leads() {
               {lista.map((l) => (
                 <tr key={l.id} className="clicavel" onClick={() => ir(`/leads/${l.id}`)}>
                   <td><strong>{l.nome}</strong><div className="muted">{l.cargo ?? l.email ?? ''}</div></td>
-                  <td>{l.empresa ?? '—'}{l.colaboradores ? <div className="muted">{l.colaboradores} colab.</div> : null}</td>
+                  <td>{l.empresa ?? '—'}{l.colaboradores ? <div className="muted">{l.colaboradores} colab.</div> : l.enriquecimento?.porte_informado ? <div className="muted">{l.enriquecimento.porte_informado} colab.</div> : null}</td>
                   <td>{nomeOrigem(l.origem)}{l.utm_campaign ? <div className="muted">{l.utm_campaign}</div> : null}</td>
                   <td><Nota valor={l.nota_perfil} /></td>
                   <td><Nota valor={l.nota_interesse} /></td>
