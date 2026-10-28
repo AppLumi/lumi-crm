@@ -62,28 +62,54 @@ export async function corpoCru(req: VercelRequest): Promise<string> {
 }
 
 /** Consulta pública de CNPJ (BrasilAPI). Devolve só dados cadastrais da empresa. */
-export async function consultarCnpj(cnpj: string): Promise<Record<string, unknown> | null> {
+// A BrasilAPI recusa (403) chamadas que se identificam como "node", o padrão do fetch no servidor.
+const IDENTIFICACAO = { 'User-Agent': 'LumiCRM/1.0 (+https://crm.applumi.io)', Accept: 'application/json' };
+
+async function buscarJson(url: string, ms = 7000): Promise<Record<string, unknown> | null> {
   const ctl = new AbortController();
-  const t = setTimeout(() => ctl.abort(), 6000);
+  const t = setTimeout(() => ctl.abort(), ms);
   try {
-    const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, { signal: ctl.signal });
-    if (!r.ok) return null;
-    const j = (await r.json()) as Record<string, unknown>;
-    return {
-      razao_social: j.razao_social ?? null,
-      nome_fantasia: j.nome_fantasia || null,
-      cnae: j.cnae_fiscal != null ? String(j.cnae_fiscal) : null,
-      setor: j.cnae_fiscal_descricao ?? null,
-      porte: j.porte ?? j.descricao_porte ?? null,
-      municipio: j.municipio ?? null,
-      uf: j.uf ?? null,
-      situacao: j.descricao_situacao_cadastral ?? null,
-    };
-  } catch {
+    const r = await fetch(url, { signal: ctl.signal, headers: IDENTIFICACAO });
+    if (!r.ok) { console.warn('cnpj:', url.split('/')[2], r.status); return null; }
+    return (await r.json()) as Record<string, unknown>;
+  } catch (e) {
+    console.warn('cnpj:', url.split('/')[2], (e as Error).message);
     return null;
   } finally {
     clearTimeout(t);
   }
+}
+
+/** Dados públicos do CNPJ: BrasilAPI e, se ela falhar, CNPJ.ws. */
+export async function consultarCnpj(cnpj: string): Promise<Record<string, unknown> | null> {
+  const b = await buscarJson(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+  if (b) {
+    return {
+      razao_social: b.razao_social ?? null,
+      nome_fantasia: b.nome_fantasia || null,
+      cnae: b.cnae_fiscal != null ? String(b.cnae_fiscal) : null,
+      setor: b.cnae_fiscal_descricao ?? null,
+      porte: b.porte ?? b.descricao_porte ?? null,
+      municipio: b.municipio ?? null,
+      uf: b.uf ?? null,
+      situacao: b.descricao_situacao_cadastral ?? null,
+    };
+  }
+  const w = await buscarJson(`https://publica.cnpj.ws/cnpj/${cnpj}`);
+  if (!w) return null;
+  const est = (w.estabelecimento ?? {}) as Record<string, unknown>;
+  const ativ = (est.atividade_principal ?? {}) as Record<string, unknown>;
+  const nome = (o: unknown, campo: string) => (o && typeof o === 'object' ? ((o as Record<string, unknown>)[campo] as string) ?? null : null);
+  return {
+    razao_social: w.razao_social ?? null,
+    nome_fantasia: est.nome_fantasia || null,
+    cnae: ativ.id != null ? String(ativ.id) : null,
+    setor: ativ.descricao ?? null,
+    porte: nome(w.porte, 'descricao'),
+    municipio: nome(est.cidade, 'nome'),
+    uf: nome(est.estado, 'sigla'),
+    situacao: est.situacao_cadastral ?? null,
+  };
 }
 
 /** Envia e-mail pelo Resend. Devolve o id do envio. */
