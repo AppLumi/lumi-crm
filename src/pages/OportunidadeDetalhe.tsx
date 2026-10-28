@@ -134,7 +134,7 @@ export default function OportunidadeDetalhe() {
                 <tbody>
                   {propostas.map((p) => (
                     <tr key={p.id}>
-                      <td>v{p.versao} · {p.plano === 'premium' ? 'Premium' : 'Starter'}<div className="muted">{p.vidas.toLocaleString('pt-BR')} vidas{p.desconto_pct > 0 ? ` · ${p.desconto_pct}% off` : ''}</div></td>
+                      <td style={{ whiteSpace: 'nowrap' }}>v{p.versao} · {p.plano === 'premium' ? 'Premium' : 'Starter'}<div className="muted">{p.vidas.toLocaleString('pt-BR')} vidas{p.desconto_pct > 0 ? ` · ${p.desconto_pct}% off` : ''}</div></td>
                       <td className="num">{brl(Number(p.mensal))}</td>
                       <td className="num">{brl(Number(p.primeiro_ano))}</td>
                       <td>
