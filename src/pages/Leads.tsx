@@ -6,6 +6,7 @@ import { STATUS_LEAD, nomeOrigem, relativo } from '../lib/formato';
 import type { Lead, StatusLead } from '../lib/tipos';
 import { Campo, Carregando, Modal, Nota, Selo, Vazio } from '../components/ui';
 import { cnpjValido, notaPerfil } from '../../shared/pontuacao';
+import { lerLista, nomeSuspeito } from '../../shared/importacao';
 
 const vazio = { nome: '', email: '', whatsapp: '', empresa: '', cnpj: '', cargo: '', colaboradores: '', origem: 'indicacao', evento: '', mensagem: '', aceita_marketing: false };
 
@@ -23,6 +24,8 @@ export default function Leads() {
   const [novo, setNovo] = useState(vazio);
   const [importar, setImportar] = useState(false);
   const [csv, setCsv] = useState('');
+  const [marcados, setMarcados] = useState<Set<string>>(new Set());
+  const [confirmarExclusao, setConfirmarExclusao] = useState(false);
 
   const carregar = useCallback(async () => {
     let q = supabase.from('v_leads').select('*').order('criado_em', { ascending: false }).limit(1000);
@@ -60,21 +63,44 @@ export default function Leads() {
     ir(`/leads/${r!.id}`);
   }, 'Lead criado');
 
-  // importação simples de lista (evento, feira): nome;email;whatsapp;empresa;cargo;colaboradores
-  const linhasCsv = csv.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => l.split(/[;,\t]/).map((c) => c.trim()))
-    .filter((c) => c[0] && !/^nome$/i.test(c[0]));
+  // importação de lista (evento, feira): lê os títulos da planilha; sem títulos, usa nome;email;whatsapp;empresa;cargo;colaboradores
+  const leitura = useMemo(() => lerLista(csv), [csv]);
+  const [importados, setImportados] = useState('');
   const importarCsv = () => executar(async () => {
-    if (!linhasCsv.length) throw new Error('Cole ao menos uma linha');
-    const linhas = linhasCsv.map(([nome, email, whatsapp, empresa, cargo, colaboradores]) => {
-      const colab = Number((colaboradores ?? '').replace(/\D/g, '')) || null;
-      const zap = (whatsapp ?? '').replace(/\D/g, '') || null;
-      return { nome, email: email?.toLowerCase() || null, whatsapp: zap, empresa: empresa || null, cargo: cargo || null, colaboradores: colab,
-        origem: novo.origem || 'evento', evento: novo.evento || null, dono: perfil?.id, nota_perfil: notaPerfil({ colaboradores: colab, cargo, temWhatsapp: !!zap }) };
+    if (!leitura.linhas.length) throw new Error('Nenhuma linha válida para importar');
+    // não duplica quem já está no CRM com o mesmo e-mail
+    const emails = [...new Set(leitura.linhas.map((l) => l.email).filter(Boolean))] as string[];
+    const existentes = new Set<string>();
+    for (let i = 0; i < emails.length; i += 200) {
+      const r = ok(await supabase.from('leads').select('email').in('email', emails.slice(i, i + 200)));
+      (r ?? []).forEach((x: { email: string | null }) => x.email && existentes.add(x.email.toLowerCase()));
+    }
+    const vistos = new Set<string>();
+    const novos = leitura.linhas.filter((l) => {
+      if (!l.email) return true;
+      if (existentes.has(l.email) || vistos.has(l.email)) return false;
+      vistos.add(l.email); return true;
     });
-    ok(await supabase.from('leads').insert(linhas));
+    const linhas = novos.map((l) => ({ ...l, origem: novo.origem || 'evento', evento: novo.evento || null, dono: perfil?.id,
+      nota_perfil: notaPerfil({ colaboradores: l.colaboradores, cargo: l.cargo ?? undefined, temWhatsapp: !!l.whatsapp }) }));
+    for (let i = 0; i < linhas.length; i += 200) ok(await supabase.from('leads').insert(linhas.slice(i, i + 200)));
+    const rep = leitura.linhas.length - novos.length;
+    setImportados(`${novos.length} lead(s) importado(s)${rep ? `, ${rep} já estavam no CRM` : ''}`);
     setImportar(false); setCsv('');
     await carregar();
-  }, `${linhasCsv.length} lead(s) importado(s)`);
+  }, 'Importação concluída');
+
+  // seleção em massa e exclusão
+  const suspeitos = useMemo(() => (leads ?? []).filter((l) => nomeSuspeito(l.nome)), [leads]);
+  const alternar = (id: string) => setMarcados((m) => { const n = new Set(m); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const todosMarcados = lista.length > 0 && lista.every((l) => marcados.has(l.id));
+  const marcarTodos = () => setMarcados(todosMarcados ? new Set() : new Set(lista.map((l) => l.id)));
+  const excluir = () => executar(async () => {
+    const ids = [...marcados];
+    for (let i = 0; i < ids.length; i += 200) ok(await supabase.from('leads').delete().in('id', ids.slice(i, i + 200)));
+    setMarcados(new Set()); setConfirmarExclusao(false);
+    await carregar();
+  }, `${marcados.size} lead(s) excluído(s)`);
 
   return (
     <>
@@ -109,13 +135,32 @@ export default function Leads() {
         <span className="muted">{lista.length} lead(s)</span>
       </div>
 
+      {importados ? <div className="aviso ok" style={{ marginBottom: 14 }}>{importados}. <button className="btn-texto" onClick={() => setImportados('')}>Fechar</button></div> : null}
+
+      {suspeitos.length > 0 && (
+        <div className="aviso erro" style={{ marginBottom: 14, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ flex: '1 1 320px' }}><b>{suspeitos.length} lead(s) entraram com as colunas trocadas</b>: o nome ficou com uma data (ex.: "{suspeitos[0].nome}"). Selecione, exclua e importe a planilha de novo.</span>
+          <button className="btn pequeno" onClick={() => { setBusca(''); setOrigem(''); setDono(''); setMarcados(new Set(suspeitos.map((l) => l.id))); setConfirmarExclusao(false); }}>Selecionar esses {suspeitos.length}</button>
+        </div>
+      )}
+
+      {marcados.size > 0 && (
+        <div className="aviso info" style={{ marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ flex: '1 1 240px' }}><b>{marcados.size}</b> lead(s) selecionado(s){confirmarExclusao ? '. A exclusão apaga também o histórico desses leads e não dá para desfazer.' : ''}</span>
+          {confirmarExclusao
+            ? <><button className="btn pequeno" onClick={() => setConfirmarExclusao(false)}>Cancelar</button><button className="btn pequeno perigo" disabled={ocupado} onClick={excluir}>Excluir {marcados.size} de vez</button></>
+            : <><button className="btn pequeno" onClick={() => setMarcados(new Set())}>Limpar seleção</button><button className="btn pequeno perigo" onClick={() => setConfirmarExclusao(true)}>Excluir selecionados</button></>}
+        </div>
+      )}
+
       {!leads ? <Carregando /> : lista.length === 0 ? <Vazio>Nenhum lead com esses filtros.</Vazio> : (
         <div className="tabela-envolve">
           <table className="tabela">
-            <thead><tr><th>Nome</th><th>Empresa</th><th>Origem</th><th>Perfil</th><th>Interesse</th><th>Status</th><th>Dono</th><th className="num">Entrou</th></tr></thead>
+            <thead><tr><th style={{ width: 34 }}><input type="checkbox" aria-label="Selecionar todos" checked={todosMarcados} onChange={marcarTodos} /></th><th>Nome</th><th>Empresa</th><th>Origem</th><th>Perfil</th><th>Interesse</th><th>Status</th><th>Dono</th><th className="num">Entrou</th></tr></thead>
             <tbody>
               {lista.map((l) => (
                 <tr key={l.id} className="clicavel" onClick={() => ir(`/leads/${l.id}`)}>
+                  <td onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`Selecionar ${l.nome}`} checked={marcados.has(l.id)} onChange={() => alternar(l.id)} /></td>
                   <td><strong>{l.nome}</strong><div className="muted">{l.cargo ?? l.email ?? ''}</div></td>
                   <td>{l.empresa ?? '—'}{l.colaboradores ? <div className="muted">{l.colaboradores} colab.</div> : l.enriquecimento?.porte_informado ? <div className="muted">{l.enriquecimento.porte_informado} colab.</div> : null}</td>
                   <td>{nomeOrigem(l.origem)}{l.utm_campaign ? <div className="muted">{l.utm_campaign}</div> : null}</td>
@@ -162,8 +207,8 @@ export default function Leads() {
       </Modal>
 
       <Modal titulo="Importar lista de leads" aberto={importar} fechar={() => setImportar(false)} largura={700}
-        rodape={<><button className="btn" onClick={() => setImportar(false)}>Cancelar</button><button className="btn primario" disabled={ocupado || !linhasCsv.length} onClick={importarCsv}>Importar {linhasCsv.length || ''}</button></>}>
-        <div className="aviso info">Uma pessoa por linha: <b>nome; e-mail; WhatsApp; empresa; cargo; colaboradores</b>. Dá para colar direto de uma planilha. Só importe quem deu o contato para falar sobre o Lumi.</div>
+        rodape={<><button className="btn" onClick={() => setImportar(false)}>Cancelar</button><button className="btn primario" disabled={ocupado || !leitura.linhas.length} onClick={importarCsv}>Importar {leitura.linhas.length || ''}</button></>}>
+        <div className="aviso info">Cole a planilha <b>com a linha de títulos</b> (Nome, E-mail, Celular ou WhatsApp, Empresa, Cargo, Colaboradores): as colunas são achadas pelo título, em qualquer ordem, e as outras são ignoradas. Sem títulos, a ordem é <b>nome; e-mail; WhatsApp; empresa; cargo; colaboradores</b>. Quem já está no CRM com o mesmo e-mail não é duplicado. Só importe quem deu o contato para falar sobre o Lumi.</div>
         <div className="linha-campos">
           <Campo rotulo="Origem">
             <select value={novo.origem} onChange={(e) => setNovo({ ...novo, origem: e.target.value })}>
@@ -172,7 +217,30 @@ export default function Leads() {
           </Campo>
           <Campo rotulo="Evento ou campanha"><input value={novo.evento} onChange={(e) => setNovo({ ...novo, evento: e.target.value })} placeholder="Ex.: Café NR-1 Curitiba" /></Campo>
         </div>
-        <Campo rotulo="Linhas"><textarea value={csv} onChange={(e) => setCsv(e.target.value)} style={{ minHeight: 200, fontFamily: 'monospace', fontSize: 12 }} /></Campo>
+        <Campo rotulo="Linhas"><textarea value={csv} onChange={(e) => setCsv(e.target.value)} style={{ minHeight: 160, fontFamily: 'monospace', fontSize: 12 }} /></Campo>
+        {csv.trim() && (
+          <div style={{ display: 'grid', gap: 10, marginTop: 4 }}>
+            <div className="muted" style={{ fontSize: 13 }}>
+              {leitura.porTitulo
+                ? <>Colunas encontradas: {leitura.colunas.map((c) => `${c.titulo} → ${({ nome: 'nome', email: 'e-mail', whatsapp: 'WhatsApp', empresa: 'empresa', cargo: 'cargo', colaboradores: 'colaboradores' })[c.campo]}`).join(' · ')}</>
+                : <>Sem linha de títulos: lendo na ordem nome; e-mail; WhatsApp; empresa; cargo; colaboradores.</>}
+              {' '}<b>{leitura.linhas.length}</b> pronta(s) para importar{leitura.puladas.length ? `, ${leitura.puladas.length} pulada(s)` : ''}.
+            </div>
+            {leitura.linhas.length > 0 && (
+              <div className="tabela-envolve">
+                <table className="tabela">
+                  <thead><tr><th>Nome</th><th>E-mail</th><th>WhatsApp</th><th>Empresa</th><th>Cargo</th></tr></thead>
+                  <tbody>{leitura.linhas.slice(0, 4).map((l, i) => <tr key={i}><td>{l.nome}</td><td>{l.email ?? '—'}</td><td>{l.whatsapp ?? '—'}</td><td>{l.empresa ?? '—'}</td><td>{l.cargo ?? '—'}</td></tr>)}</tbody>
+                </table>
+              </div>
+            )}
+            {leitura.puladas.length > 0 && (
+              <div className="aviso erro" style={{ fontSize: 13 }}>
+                Linhas puladas: {leitura.puladas.slice(0, 4).map((p) => `linha ${p.linha} (${p.motivo})`).join('; ')}{leitura.puladas.length > 4 ? ` e mais ${leitura.puladas.length - 4}` : ''}.
+              </div>
+            )}
+          </div>
+        )}
       </Modal>
     </>
   );
