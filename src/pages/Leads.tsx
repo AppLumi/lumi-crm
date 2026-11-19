@@ -7,6 +7,7 @@ import type { Lead, StatusLead } from '../lib/tipos';
 import { Campo, Carregando, Modal, Nota, Selo, Vazio } from '../components/ui';
 import { cnpjValido, notaPerfil } from '../../shared/pontuacao';
 import { lerLista, nomeSuspeito } from '../../shared/importacao';
+import DisparoEmail from '../components/DisparoEmail';
 
 const vazio = { nome: '', email: '', whatsapp: '', empresa: '', cnpj: '', cargo: '', colaboradores: '', origem: 'indicacao', evento: '', mensagem: '', aceita_marketing: false };
 
@@ -26,6 +27,7 @@ export default function Leads() {
   const [csv, setCsv] = useState('');
   const [marcados, setMarcados] = useState<Set<string>>(new Set());
   const [confirmarExclusao, setConfirmarExclusao] = useState(false);
+  const [disparo, setDisparo] = useState<Lead[] | null>(null);
 
   const carregar = useCallback(async () => {
     let q = supabase.from('v_leads').select('*').order('criado_em', { ascending: false }).limit(1000);
@@ -149,7 +151,7 @@ export default function Leads() {
           <span style={{ flex: '1 1 240px' }}><b>{marcados.size}</b> lead(s) selecionado(s){confirmarExclusao ? '. A exclusão apaga também o histórico desses leads e não dá para desfazer.' : ''}</span>
           {confirmarExclusao
             ? <><button className="btn pequeno" onClick={() => setConfirmarExclusao(false)}>Cancelar</button><button className="btn pequeno perigo" disabled={ocupado} onClick={excluir}>Excluir {marcados.size} de vez</button></>
-            : <><button className="btn pequeno" onClick={() => setMarcados(new Set())}>Limpar seleção</button><button className="btn pequeno perigo" onClick={() => setConfirmarExclusao(true)}>Excluir selecionados</button></>}
+            : <><button className="btn pequeno" onClick={() => setMarcados(new Set())}>Limpar seleção</button><button className="btn pequeno primario" onClick={() => setDisparo((leads ?? []).filter((l) => marcados.has(l.id)))}>Enviar e-mail para {marcados.size}</button><button className="btn pequeno perigo" onClick={() => setConfirmarExclusao(true)}>Excluir selecionados</button></>}
         </div>
       )}
 
@@ -175,6 +177,8 @@ export default function Leads() {
           </table>
         </div>
       )}
+
+      {disparo && <DisparoEmail leads={disparo} fechar={() => setDisparo(null)} enviado={() => { setMarcados(new Set()); carregar(); }} />}
 
       <Modal titulo="Novo lead" aberto={params.get('novo') === '1'} fechar={fecharNovo} largura={640}
         rodape={<><button className="btn" onClick={fecharNovo}>Cancelar</button><button className="btn primario" disabled={ocupado} onClick={criar}>Criar lead</button></>}>

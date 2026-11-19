@@ -1,6 +1,7 @@
 // Utilidades das funções de servidor (Vercel). Chaves só vêm de variáveis de ambiente.
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 
 export const env = (k: string, obrigatoria = true): string => {
   const v = (process.env[k] ?? '').trim();
@@ -127,6 +128,34 @@ export async function enviarEmail(m: { para: string[]; assunto: string; html: st
   if (!r.ok || !j.id) throw new Error(`Resend ${r.status}: ${j.message ?? 'falha no envio'}`);
   return j.id;
 }
+
+/** Envia até 100 e-mails numa chamada (API de lote do Resend). Devolve os ids na mesma ordem. */
+export async function enviarLote(msgs: { para: string; assunto: string; html: string; texto: string; de: string; responderPara?: string; cabecalhos?: Record<string, string> }[]): Promise<string[]> {
+  for (let tentativa = 0; ; tentativa++) {
+    const r = await fetch('https://api.resend.com/emails/batch', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${env('RESEND_API_KEY')}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(msgs.map((m) => ({
+        from: m.de, to: [m.para], subject: m.assunto, html: m.html, text: m.texto,
+        ...(m.responderPara ? { reply_to: m.responderPara } : {}), ...(m.cabecalhos ? { headers: m.cabecalhos } : {}),
+      }))),
+    });
+    if (r.status === 429 && tentativa < 3) { await new Promise((s) => setTimeout(s, 1200 * (tentativa + 1))); continue; }
+    const j = (await r.json().catch(() => ({}))) as { data?: { id: string }[]; message?: string };
+    if (!r.ok || !Array.isArray(j.data) || j.data.length !== msgs.length) throw new Error(`Resend ${r.status}: ${j.message ?? 'falha no envio em lote'}`);
+    return j.data.map((d) => d.id);
+  }
+}
+
+/** Link de descadastro de um lead, assinado (não dá para descadastrar outra pessoa trocando o id). */
+const chaveDescadastro = () => createHash('sha256').update('lumi-crm-descadastro:' + env('SUPABASE_SERVICE_ROLE_KEY')).digest();
+export const assinarLead = (leadId: string) => createHmac('sha256', chaveDescadastro()).update(leadId).digest('base64url').slice(0, 24);
+export function assinaturaLeadValida(leadId: string, t: string): boolean {
+  const a = Buffer.from(assinarLead(leadId)), b = Buffer.from(String(t));
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+export const linkDescadastro = (leadId: string) =>
+  `${(env('CRM_URL', false) || 'https://crm.applumi.io').replace(/\/$/, '')}/api/descadastro?l=${leadId}&t=${assinarLead(leadId)}`;
 
 /** Converte o texto simples de um e-mail comercial em HTML limpo (parágrafos e listas). */
 export function textoParaHtml(t: string): string {

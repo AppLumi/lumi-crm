@@ -16,9 +16,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // respeita descadastro
   const { data: contato } = await db.from('contatos').select('id, descadastrado_em').ilike('email', para).maybeSingle();
   if (contato?.descadastrado_em) return res.status(409).json({ erro: 'Este contato pediu para não receber e-mails' });
+  const leadId = texto(b.lead_id, 40);
+  if (leadId) {
+    const { data: saiu } = await db.from('eventos').select('id').eq('nome', 'descadastro').eq('lead_id', leadId).limit(1);
+    if (saiu?.length) return res.status(409).json({ erro: 'Este lead pediu para não receber e-mails' });
+  }
 
   const ref = {
-    lead_id: texto(b.lead_id, 40), contato_id: texto(b.contato_id, 40) ?? contato?.id ?? null,
+    lead_id: leadId, contato_id: texto(b.contato_id, 40) ?? contato?.id ?? null,
     conta_id: texto(b.conta_id, 40), oportunidade_id: texto(b.oportunidade_id, 40),
   };
   const { data: reg, error } = await db.from('emails').insert({

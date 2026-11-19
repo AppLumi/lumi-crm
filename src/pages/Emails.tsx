@@ -18,9 +18,35 @@ const STATUS: Record<string, { nome: string; cor: string }> = {
 };
 const VARIAVEIS = ['primeiro_nome', 'nome', 'empresa', 'remetente', 'link_proposta', 'validade'];
 
+interface Disparo {
+  id: number; em: string; detalhe: { assunto: string; autor: string; recebem: number; enviados?: number; falhas?: number; emails?: string[] };
+  stats: { entregues: number; abertos: number; cliques: number; problemas: number };
+}
+
+async function carregarDisparos(): Promise<Disparo[]> {
+  const { data } = await supabase.from('auditoria').select('id, em, detalhe').eq('acao', 'disparo_email').order('em', { ascending: false }).limit(50);
+  const lista = (data ?? []) as Omit<Disparo, 'stats'>[];
+  const ids = lista.flatMap((d) => d.detalhe?.emails ?? []);
+  const status = new Map<string, { status: string; aberto_em: string | null; clicado_em: string | null }>();
+  for (let i = 0; i < ids.length; i += 200) {
+    const r = await supabase.from('emails').select('id, status, aberto_em, clicado_em').in('id', ids.slice(i, i + 200));
+    (r.data ?? []).forEach((e: { id: string; status: string; aberto_em: string | null; clicado_em: string | null }) => status.set(e.id, e));
+  }
+  return lista.map((d) => {
+    const es = (d.detalhe?.emails ?? []).map((id) => status.get(id)).filter(Boolean) as { status: string; aberto_em: string | null; clicado_em: string | null }[];
+    return { ...d, stats: {
+      entregues: es.filter((e) => ['entregue', 'aberto', 'clicado'].includes(e.status)).length,
+      abertos: es.filter((e) => e.aberto_em).length,
+      cliques: es.filter((e) => e.clicado_em).length,
+      problemas: es.filter((e) => ['devolvido', 'reclamacao', 'falhou'].includes(e.status)).length,
+    } };
+  });
+}
+
 export default function Emails() {
   const { ocupado, executar } = useAcao();
-  const [aba, setAba] = useState<'enviados' | 'modelos'>('enviados');
+  const [aba, setAba] = useState<'enviados' | 'disparos' | 'modelos'>('enviados');
+  const [disparos, setDisparos] = useState<Disparo[] | null>(null);
   const [emails, setEmails] = useState<Email[] | null>(null);
   const [modelos, setModelos] = useState<ModeloEmail[]>([]);
   const [editar, setEditar] = useState<Partial<ModeloEmail> | null>(null);
@@ -34,6 +60,7 @@ export default function Emails() {
     setModelos((m.data ?? []) as ModeloEmail[]);
   }, []);
   useEffect(() => { carregar(); }, [carregar]);
+  useEffect(() => { if (aba === 'disparos') carregarDisparos().then(setDisparos); }, [aba]);
 
   const salvar = () => executar(async () => {
     if (!editar?.nome?.trim() || !editar.assunto?.trim() || !editar.corpo?.trim()) throw new Error('Preencha nome, assunto e texto');
@@ -51,15 +78,44 @@ export default function Emails() {
   return (
     <>
       <div className="topo">
-        <div><h1>E-mails</h1><p>Envios individuais do time, com abertura e clique. Respostas chegam no e-mail de quem enviou.</p></div>
+        <div><h1>E-mails</h1><p>Envios do time, individuais e em massa, com abertura e clique. Respostas chegam no e-mail de quem enviou.</p></div>
         {aba === 'modelos' && <button className="btn primario" onClick={() => setEditar({ ativo: true, categoria: 'comercial' })}>Novo modelo</button>}
       </div>
       <div className="abas">
         <button className={aba === 'enviados' ? 'ativa' : ''} onClick={() => setAba('enviados')}>Enviados</button>
+        <button className={aba === 'disparos' ? 'ativa' : ''} onClick={() => setAba('disparos')}>Disparos</button>
         <button className={aba === 'modelos' ? 'ativa' : ''} onClick={() => setAba('modelos')}>Modelos</button>
       </div>
 
-      {aba === 'enviados' ? (
+      {aba === 'disparos' ? (
+        !disparos ? <Carregando /> : disparos.length === 0
+          ? <Vazio>Nenhum disparo ainda. Em Leads, marque as pessoas (por exemplo, filtre por Nutrição e marque todas) e clique em “Enviar e-mail”.</Vazio>
+          : (
+            <div className="tabela-envolve" style={{ marginTop: 12 }}>
+              <table className="tabela">
+                <thead><tr><th>Assunto</th><th>Quem enviou</th><th className="num">Enviados</th><th className="num">Entregues</th><th className="num">Abriram</th><th className="num">Clicaram</th><th className="num">Problemas</th><th className="num">Quando</th></tr></thead>
+                <tbody>
+                  {disparos.map((d) => {
+                    const env = d.detalhe.enviados ?? 0;
+                    const pct = (n: number) => (env ? ` (${Math.round((n / env) * 100)}%)` : '');
+                    return (
+                      <tr key={d.id}>
+                        <td><strong>{d.detalhe.assunto}</strong>{d.detalhe.enviados == null && <div className="muted">enviando ou interrompido</div>}</td>
+                        <td>{d.detalhe.autor}</td>
+                        <td className="num">{env}{d.detalhe.falhas ? <div className="muted">{d.detalhe.falhas} falharam</div> : null}</td>
+                        <td className="num">{d.stats.entregues}</td>
+                        <td className="num">{d.stats.abertos}{pct(d.stats.abertos)}</td>
+                        <td className="num">{d.stats.cliques}{pct(d.stats.cliques)}</td>
+                        <td className="num">{d.stats.problemas}</td>
+                        <td className="num">{dataHora(d.em)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )
+      ) : aba === 'enviados' ? (
         <>
           <div className="grade g4" style={{ margin: '12px 0 16px' }}>
             <Kpi rotulo="Enviados" valor={enviados.length} nota="últimos 300" />

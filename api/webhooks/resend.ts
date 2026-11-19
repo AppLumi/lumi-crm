@@ -49,6 +49,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if ((ev.type === 'email.opened' || ev.type === 'email.clicked') && email.lead_id && m.campo && !email[m.campo]) {
     await db.from('eventos').insert({ nome: ev.type === 'email.opened' ? 'email_aberto' : 'email_clique', origem: 'email', lead_id: email.lead_id, conta_id: email.conta_id });
   }
+  if (ev.type === 'email.complained' && email.lead_id) {
+    await db.from('eventos').insert({ nome: 'descadastro', origem: 'email', lead_id: email.lead_id, propriedades: { motivo: 'marcou_spam' } });
+    await db.from('leads').update({ aceita_marketing: false }).eq('id', email.lead_id);
+  }
   if (ev.type === 'email.complained' && email.contato_id) {
     await db.from('contatos').update({ descadastrado_em: new Date().toISOString(), aceita_marketing: false }).eq('id', email.contato_id);
   }
