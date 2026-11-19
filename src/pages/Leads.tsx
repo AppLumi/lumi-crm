@@ -8,6 +8,7 @@ import { Campo, Carregando, Modal, Nota, Selo, Vazio } from '../components/ui';
 import { cnpjValido, notaPerfil } from '../../shared/pontuacao';
 import { lerLista, nomeSuspeito } from '../../shared/importacao';
 import DisparoEmail from '../components/DisparoEmail';
+import { contasPorDominio, dominioDoEmail, vincularLeadAConta, type ContaResumo } from '../../shared/empresas';
 
 const vazio = { nome: '', email: '', whatsapp: '', empresa: '', cnpj: '', cargo: '', colaboradores: '', origem: 'indicacao', evento: '', mensagem: '', aceita_marketing: false };
 
@@ -85,9 +86,23 @@ export default function Leads() {
     });
     const linhas = novos.map((l) => ({ ...l, origem: novo.origem || 'evento', evento: novo.evento || null, dono: perfil?.id,
       nota_perfil: notaPerfil({ colaboradores: l.colaboradores, cargo: l.cargo ?? undefined, temWhatsapp: !!l.whatsapp }) }));
-    for (let i = 0; i < linhas.length; i += 200) ok(await supabase.from('leads').insert(linhas.slice(i, i + 200)));
+    const criados: Lead[] = [];
+    for (let i = 0; i < linhas.length; i += 200) {
+      criados.push(...((ok(await supabase.from('leads').insert(linhas.slice(i, i + 200)).select('*')) ?? []) as Lead[]));
+    }
+    // quem tem e-mail corporativo de uma empresa que já está no CRM entra como contato dela
+    const porDominio = new Map<string, ContaResumo | null>();
+    let vinculados = 0;
+    for (const l of criados) {
+      const d = dominioDoEmail(l.email);
+      if (!d) continue;
+      if (!porDominio.has(d)) { const cs = await contasPorDominio(supabase, d); porDominio.set(d, cs.length === 1 ? cs[0] : null); }
+      const conta = porDominio.get(d);
+      if (!conta) continue;
+      try { await vincularLeadAConta(supabase, l, conta, { autor: perfil?.id, motivo: `mesmo domínio @${d} (importação)`, moverContato: false }); vinculados++; } catch { /* segue a importação */ }
+    }
     const rep = leitura.linhas.length - novos.length;
-    setImportados(`${novos.length} lead(s) importado(s)${rep ? `, ${rep} já estavam no CRM` : ''}`);
+    setImportados(`${novos.length} lead(s) importado(s)${rep ? `, ${rep} já estavam no CRM` : ''}${vinculados ? `, ${vinculados} vinculado(s) a empresas pelo domínio do e-mail` : ''}`);
     setImportar(false); setCsv('');
     await carregar();
   }, 'Importação concluída');

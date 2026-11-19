@@ -25,7 +25,7 @@ export interface Lead {
   cargo: string | null; colaboradores: number | null; mensagem: string | null; origem: string; utm_source: string | null;
   utm_medium: string | null; utm_campaign: string | null; pagina: string | null; evento: string | null;
   aceita_marketing: boolean; status: StatusLead; nota_perfil: number; nota_interesse: number; dono: string | null;
-  dono_nome: string | null; conta_id: string | null; oportunidade_id: string | null;
+  dono_nome: string | null; conta_id: string | null; contato_id: string | null; oportunidade_id: string | null;
   enriquecimento: Record<string, string | null> | null; motivo_descarte: string | null; primeiro_contato_em: string | null; criado_em: string;
 }
 

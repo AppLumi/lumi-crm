@@ -7,6 +7,8 @@ import type { Lead, Plano } from '../lib/tipos';
 import { Campo, Carregando, Modal, Nota, Selo } from '../components/ui';
 import LinhaDoTempo from '../components/LinhaDoTempo';
 import EnviarEmail, { type DestinoEmail } from '../components/EnviarEmail';
+import EscolherConta, { type Sugestao } from '../components/EscolherConta';
+import { contasPorDominio, dominioDoEmail, vincularLeadAConta, type ContaResumo } from '../../shared/empresas';
 
 interface Evento { id: string; nome: string; origem: string; criado_em: string }
 
@@ -19,7 +21,7 @@ const NOME_EVENTO: Record<string, string> = {
 export default function LeadDetalhe() {
   const { id } = useParams<{ id: string }>();
   const ir = useNavigate();
-  const { time } = useSessao();
+  const { time, perfil } = useSessao();
   const { ocupado, executar } = useAcao();
   const [lead, setLead] = useState<Lead | null>(null);
   const [eventos, setEventos] = useState<Evento[]>([]);
@@ -29,14 +31,35 @@ export default function LeadDetalhe() {
   const [descartar, setDescartar] = useState(false);
   const [motivo, setMotivo] = useState('');
   const [tick, setTick] = useState(0);
+  const [conta, setConta] = useState<ContaResumo | null>(null);
+  const [sugestoes, setSugestoes] = useState<Sugestao[]>([]);
+  const [escolher, setEscolher] = useState(false);
 
   const carregar = useCallback(async () => {
     const [l, e] = await Promise.all([
       supabase.from('v_leads').select('*').eq('id', id!).maybeSingle(),
       supabase.from('eventos').select('id, nome, origem, criado_em').eq('lead_id', id!).order('criado_em', { ascending: false }).limit(50),
     ]);
-    setLead(l.data as Lead | null);
+    const ld = l.data as Lead | null;
+    setLead(ld);
     setEventos((e.data ?? []) as Evento[]);
+    if (!ld) return;
+    if (ld.conta_id) {
+      const c = await supabase.from('contas').select('id, nome, cnpj').eq('id', ld.conta_id).maybeSingle();
+      setConta(c.data as ContaResumo | null);
+      setSugestoes([]);
+    } else {
+      setConta(null);
+      // empresas prováveis: mesmo CNPJ ou mesmo domínio de e-mail
+      const s: Sugestao[] = [];
+      if (ld.cnpj) {
+        const c = await supabase.from('contas').select('id, nome, cnpj').eq('cnpj', ld.cnpj).maybeSingle();
+        if (c.data) s.push({ conta: c.data as ContaResumo, motivo: 'mesmo CNPJ' });
+      }
+      const dom = dominioDoEmail(ld.email);
+      if (dom) (await contasPorDominio(supabase, dom)).forEach((c) => { if (!s.some((x) => x.conta.id === c.id)) s.push({ conta: c, motivo: `mesmo domínio @${dom}` }); });
+      setSugestoes(s);
+    }
   }, [id]);
   useEffect(() => { carregar(); }, [carregar, tick]);
 
@@ -47,9 +70,37 @@ export default function LeadDetalhe() {
     await carregar();
   }, msg);
 
+  const vincular = (c: ContaResumo, motivo: string) => executar(async () => {
+    await vincularLeadAConta(supabase, lead, c, { autor: perfil?.id, motivo, moverContato: true });
+    setEscolher(false);
+    await carregar();
+  }, `Vinculado(a) à empresa ${c.nome}`);
+
+  const desvincular = () => executar(async () => {
+    if (lead.contato_id) ok(await supabase.from('contatos').update({ conta_id: null }).eq('id', lead.contato_id));
+    ok(await supabase.from('leads').update({ conta_id: null, contato_id: null }).eq('id', lead.id));
+    await supabase.from('atividades').insert({ tipo: 'sistema', titulo: `Desvinculado(a) da empresa ${conta?.nome ?? ''}`.trim(), lead_id: lead.id, autor: perfil?.id });
+    await carregar();
+  }, 'Vínculo desfeito');
+
   const fazerQualificacao = () => executar(async () => {
-    const op = ok(await supabase.rpc('qualificar_lead', { p_lead: lead.id, p_plano: plano })) as string;
-    ir(`/oportunidades/${op}`);
+    if (!lead.conta_id) {
+      const op = ok(await supabase.rpc('qualificar_lead', { p_lead: lead.id, p_plano: plano })) as string;
+      ir(`/oportunidades/${op}`);
+      return;
+    }
+    // já vinculado a uma empresa: a oportunidade nasce nela, sem criar outra conta
+    let contatoId = lead.contato_id;
+    if (!contatoId && conta) contatoId = (await vincularLeadAConta(supabase, lead, conta, { autor: perfil?.id, motivo: 'qualificação', moverContato: false })).contatoId;
+    const op = ok(await supabase.from('oportunidades').insert({
+      conta_id: lead.conta_id, titulo: `Lumi · ${conta?.nome ?? lead.empresa ?? lead.nome}`, plano, vidas: lead.colaboradores, dono: lead.dono ?? perfil?.id,
+    }).select('id').single())!;
+    await supabase.from('contas').update({ estagio: 'oportunidade' }).eq('id', lead.conta_id).eq('estagio', 'lead');
+    ok(await supabase.from('leads').update({ status: 'qualificado', contato_id: contatoId, oportunidade_id: op.id,
+      primeiro_contato_em: lead.primeiro_contato_em ?? new Date().toISOString() }).eq('id', lead.id));
+    await supabase.from('atividades').update({ conta_id: lead.conta_id, oportunidade_id: op.id }).eq('lead_id', lead.id);
+    await supabase.from('atividades').insert({ tipo: 'sistema', titulo: 'Lead qualificado e oportunidade criada', conta_id: lead.conta_id, lead_id: lead.id, oportunidade_id: op.id, autor: perfil?.id });
+    ir(`/oportunidades/${op.id}`);
   }, 'Oportunidade criada');
 
   const fazerDescarte = () => executar(async () => {
@@ -105,6 +156,28 @@ export default function LeadDetalhe() {
           </div>
 
           <div className="cartao">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <h2>Empresa</h2>
+              {!lead.oportunidade_id && <button className="btn pequeno" onClick={() => setEscolher(true)}>{conta ? 'Trocar' : 'Procurar empresa'}</button>}
+            </div>
+            {conta ? (
+              <div style={{ marginTop: 8 }}>
+                <Link to={`/contas/${conta.id}`}><strong>{conta.nome}</strong></Link>
+                <div className="muted" style={{ fontSize: 13 }}>Esta pessoa aparece entre os contatos da empresa.{!lead.oportunidade_id && <> <button className="btn-texto em-linha" disabled={ocupado} onClick={desvincular}>Desvincular</button></>}</div>
+              </div>
+            ) : sugestoes.length > 0 ? (
+              <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
+                {sugestoes.map((s) => (
+                  <div key={s.conta.id} className="aviso info" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', margin: 0 }}>
+                    <span style={{ flex: '1 1 180px' }}>Parece ser da <b>{s.conta.nome}</b> ({s.motivo}).</span>
+                    <button className="btn pequeno primario" disabled={ocupado} onClick={() => vincular(s.conta, s.motivo)}>Vincular</button>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="muted" style={{ marginTop: 8 }}>Ainda sem empresa. Vincule a uma empresa do CRM ou qualifique para criar uma nova.</p>}
+          </div>
+
+          <div className="cartao">
             <h2>Dados</h2>
             <dl className="dados" style={{ marginTop: 10 }}>
               <dt>E-mail</dt><dd>{lead.email ?? '—'}</dd>
@@ -157,7 +230,12 @@ export default function LeadDetalhe() {
 
       <Modal titulo="Qualificar lead" aberto={qualificar} fechar={() => setQualificar(false)}
         rodape={<><button className="btn" onClick={() => setQualificar(false)}>Cancelar</button><button className="btn primario" disabled={ocupado} onClick={fazerQualificacao}>Criar oportunidade</button></>}>
-        <p>Qualificar cria a conta da empresa (ou usa a que já existe pelo CNPJ), o contato e uma oportunidade no funil.</p>
+        {conta
+          ? <p>A oportunidade será criada na empresa <b>{conta.nome}</b>, à qual este lead já está vinculado.</p>
+          : <p>Qualificar cria a conta da empresa (ou usa a que já existe pelo CNPJ), o contato e uma oportunidade no funil.</p>}
+        {!conta && sugestoes.length > 0 && (
+          <div className="aviso erro">Esta pessoa parece ser da <b>{sugestoes[0].conta.nome}</b> ({sugestoes[0].motivo}). Vincule antes de qualificar para não criar a empresa em dobro: <button className="btn-texto em-linha" disabled={ocupado} onClick={() => vincular(sugestoes[0].conta, sugestoes[0].motivo)}>vincular agora</button>.</div>
+        )}
         <div className="aviso info">Antes de qualificar, confirme que existe uma dor ligada à NR-1 ou à saúde emocional do time e que a empresa tem porte para o Lumi.</div>
         <Campo rotulo="Plano de interesse">
           <select value={plano} onChange={(e) => setPlano(e.target.value as Plano)}>
@@ -178,6 +256,9 @@ export default function LeadDetalhe() {
       </Modal>
 
       <EnviarEmail destino={email} fechar={() => setEmail(null)} enviado={() => setTick((t) => t + 1)} />
+      <EscolherConta titulo={`Empresa de ${lead.nome}`} aberto={escolher} fechar={() => setEscolher(false)} escolher={vincular}
+        sugestoes={sugestoes} excluir={conta?.id} ocupado={ocupado}
+        aviso={<div className="aviso info">A pessoa entra como contato da empresa escolhida, junto com os outros contatos dela. Se o e-mail já for contato de outra empresa, ele é trazido para esta.</div>} />
     </>
   );
 }

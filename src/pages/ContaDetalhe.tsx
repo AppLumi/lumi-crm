@@ -8,6 +8,35 @@ import { Campo, Carregando, Modal, Selo, Vazio } from '../components/ui';
 import LinhaDoTempo from '../components/LinhaDoTempo';
 import EnviarEmail, { type DestinoEmail } from '../components/EnviarEmail';
 import { ESTAGIOS, type DadosCnpj } from './Contas';
+import EscolherConta, { type Sugestao } from '../components/EscolherConta';
+import { contasPorDominio, dominioDoEmail, dominiosDaConta, vincularLeadAConta, type ContaResumo } from '../../shared/empresas';
+
+interface Pessoa { tipo: 'lead' | 'contato'; id: string; nome: string; email: string | null; cargo: string | null; whatsapp: string | null;
+  aceita_marketing: boolean; consentimento_em: string | null; contato_id: string | null; conta_id: string | null; conta_nome?: string | null }
+
+const ORDEM_ESTAGIO = ['lead', 'ex_cliente', 'oportunidade', 'cliente'];
+const literal = (t: string) => t.replace(/[\\%_,()]/g, ' ');
+
+/** Leads e contatos que podem entrar nesta empresa: por domínio (sugestão) ou pela busca. */
+async function procurarPessoas(contaId: string, filtro: { dominios?: string[]; busca?: string }): Promise<Pessoa[]> {
+  const ou = filtro.busca
+    ? [`nome.ilike.%${literal(filtro.busca)}%`, `email.ilike.%${literal(filtro.busca)}%`].join(',')
+    : (filtro.dominios ?? []).map((d) => `email.ilike.%@${literal(d)}`).join(',');
+  if (!ou) return [];
+  const [l, c] = await Promise.all([
+    supabase.from('leads').select('id, nome, email, cargo, whatsapp, aceita_marketing, consentimento_em, contato_id, conta_id').or(ou).is('oportunidade_id', null).limit(50),
+    supabase.from('contatos').select('id, nome, email, cargo, whatsapp, aceita_marketing, consentimento_em, conta_id, contas(nome)').or(ou).limit(50),
+  ]);
+  const contatos: Pessoa[] = ((c.data ?? []) as unknown as (Pessoa & { contas: { nome: string } | null })[])
+    .filter((x) => x.conta_id !== contaId)
+    .map((x) => ({ ...x, tipo: 'contato', contato_id: x.id, conta_nome: x.contas?.nome ?? null }));
+  const jaContato = new Set(contatos.map((x) => x.email?.toLowerCase()));
+  const leads: Pessoa[] = ((l.data ?? []) as Pessoa[])
+    .filter((x) => x.conta_id !== contaId && !jaContato.has(x.email?.toLowerCase()))
+    .map((x) => ({ ...x, tipo: 'lead' }));
+  const doDominio = (p: Pessoa) => !filtro.dominios || filtro.dominios.includes(dominioDoEmail(p.email) ?? '');
+  return [...contatos, ...leads].filter(doDominio);
+}
 
 const contatoVazio = { id: '', nome: '', cargo: '', papel: 'outro', email: '', whatsapp: '', linkedin: '', aceita_marketing: false };
 
@@ -23,6 +52,13 @@ export default function ContaDetalhe() {
   const [email, setEmail] = useState<DestinoEmail | null>(null);
   const [notas, setNotas] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  const [mesmoDominio, setMesmoDominio] = useState<Pessoa[]>([]);
+  const [trazer, setTrazer] = useState(false);
+  const [busca, setBusca] = useState('');
+  const [achadas, setAchadas] = useState<Pessoa[]>([]);
+  const [mesclar, setMesclar] = useState(false);
+  const [destino, setDestino] = useState<ContaResumo | null>(null);
+  const [parecidas, setParecidas] = useState<Sugestao[]>([]);
 
   const carregar = useCallback(async () => {
     const [c, ct, o] = await Promise.all([
@@ -33,10 +69,75 @@ export default function ContaDetalhe() {
     setConta(c.data as Conta | null);
     setContatos((ct.data ?? []) as Contato[]);
     setOps((o.data ?? []) as Oportunidade[]);
+    const dominios = dominiosDaConta((c.data as Conta | null)?.site, ((ct.data ?? []) as Contato[]).map((x) => x.email));
+    setMesmoDominio(dominios.length ? await procurarPessoas(id!, { dominios }) : []);
   }, [id]);
   useEffect(() => { carregar(); }, [carregar]);
+  useEffect(() => {
+    const b = busca.trim();
+    if (b.length < 2) { setAchadas([]); return; }
+    const t = setTimeout(async () => setAchadas(await procurarPessoas(id!, { busca: b })), 250);
+    return () => clearTimeout(t);
+  }, [busca, id]);
 
   if (!conta) return <Carregando />;
+  const dominios = dominiosDaConta(conta.site, contatos.map((c) => c.email));
+  const resumo: ContaResumo = { id: conta.id, nome: conta.nome, cnpj: conta.cnpj };
+
+  /** Traz uma pessoa para esta empresa: o contato muda de empresa; o lead vira contato daqui. */
+  const vincularPessoa = async (p: Pessoa, motivo: string) => {
+    if (p.tipo === 'lead') {
+      await vincularLeadAConta(supabase, p, resumo, { autor: perfil?.id, motivo, moverContato: true });
+      return;
+    }
+    ok(await supabase.from('contatos').update({ conta_id: conta.id }).eq('id', p.id));
+    // leads dessa pessoa que ainda não viraram oportunidade acompanham o contato
+    await supabase.from('leads').update({ conta_id: conta.id }).eq('contato_id', p.id).is('oportunidade_id', null);
+    await supabase.from('atividades').insert({ tipo: 'sistema', titulo: `${p.nome} vinculado(a) a esta empresa`,
+      descricao: `${p.conta_nome ? `Veio da empresa ${p.conta_nome}. ` : ''}Motivo: ${motivo}.`, conta_id: conta.id, contato_id: p.id, autor: perfil?.id });
+  };
+  const trazerUma = (p: Pessoa, motivo: string) => executar(async () => { await vincularPessoa(p, motivo); await carregar(); setTick((t) => t + 1); }, `${p.nome} agora é contato da ${conta.nome}`);
+  const trazerTodas = () => executar(async () => {
+    for (const p of mesmoDominio) await vincularPessoa(p, `mesmo domínio @${dominioDoEmail(p.email)}`);
+    await carregar(); setTick((t) => t + 1);
+  }, `${mesmoDominio.length} pessoa(s) vinculada(s)`);
+
+  const abrirMesclar = async () => {
+    setDestino(null);
+    const s: Sugestao[] = [];
+    for (const d of dominios) (await contasPorDominio(supabase, d)).forEach((c) => { if (c.id !== conta.id && !s.some((x) => x.conta.id === c.id)) s.push({ conta: c, motivo: `mesmo domínio @${d}` }); });
+    const primeira = conta.nome.trim().split(/\s+/)[0];
+    if (primeira && primeira.length >= 3) {
+      const { data } = await supabase.from('contas').select('id, nome, cnpj').ilike('nome', `%${literal(primeira)}%`).neq('id', conta.id).limit(5);
+      ((data ?? []) as ContaResumo[]).forEach((c) => { if (!s.some((x) => x.conta.id === c.id)) s.push({ conta: c, motivo: 'nome parecido' }); });
+    }
+    setParecidas(s);
+    setMesclar(true);
+  };
+  /** Mescla ESTA empresa na escolhida: tudo passa para lá e esta deixa de existir. */
+  const fazerMescla = () => executar(async () => {
+    if (!destino) return;
+    const { data: alvo } = await supabase.from('contas').select('*').eq('id', destino.id).single();
+    const a = alvo as Conta;
+    for (const t of ['contatos', 'leads', 'oportunidades', 'atividades', 'eventos', 'emails'] as const) {
+      ok(await supabase.from(t).update({ conta_id: a.id }).eq('conta_id', conta.id));
+    }
+    // o destino herda o que não tinha
+    const herda: Partial<Conta> = {};
+    (['razao_social', 'cnae', 'setor', 'porte', 'colaboradores', 'cidade', 'uf', 'site', 'lumi_cliente_id', 'dono', 'origem'] as const)
+      .forEach((k) => { if (a[k] == null && conta[k] != null) (herda as Record<string, unknown>)[k] = conta[k]; });
+    if (conta.notas) herda.notas = [a.notas, `(de ${conta.nome}) ${conta.notas}`].filter(Boolean).join('\n\n');
+    if (ORDEM_ESTAGIO.indexOf(conta.estagio) > ORDEM_ESTAGIO.indexOf(a.estagio)) herda.estagio = conta.estagio;
+    const cnpj = !a.cnpj && conta.cnpj ? conta.cnpj : null;
+    if (cnpj) ok(await supabase.from('contas').update({ cnpj: null }).eq('id', conta.id));
+    ok(await supabase.from('contas').delete().eq('id', conta.id));
+    if (cnpj) herda.cnpj = cnpj;
+    if (Object.keys(herda).length) ok(await supabase.from('contas').update(herda).eq('id', a.id));
+    await supabase.from('atividades').insert({ tipo: 'sistema', titulo: `Empresa ${conta.nome} mesclada nesta`,
+      descricao: `${contatos.length} contato(s) e ${ops.length} oportunidade(s) vieram junto.`, conta_id: a.id, autor: perfil?.id });
+    setMesclar(false);
+    ir(`/contas/${a.id}`);
+  }, `Empresas mescladas em ${destino?.nome ?? ''}`);
 
   const atualizar = (campos: Partial<Conta>, msg = 'Salvo') => executar(async () => {
     ok(await supabase.from('contas').update(campos).eq('id', conta.id));
@@ -59,7 +160,13 @@ export default function ContaDetalhe() {
       linkedin: contato.linkedin.trim() || null, aceita_marketing: contato.aceita_marketing,
     };
     if (contato.id) ok(await supabase.from('contatos').update(dados).eq('id', contato.id));
-    else ok(await supabase.from('contatos').insert({ ...dados, consentimento_em: contato.aceita_marketing ? new Date().toISOString() : null }));
+    else {
+      if (dados.email) {
+        const { data: ja } = await supabase.from('contatos').select('id, conta_id, contas(nome)').ilike('email', dados.email).maybeSingle();
+        if (ja) throw new Error(ja.conta_id === conta.id ? 'Esse e-mail já é contato desta empresa' : `Esse e-mail já é contato de ${(ja as unknown as { contas: { nome: string } | null }).contas?.nome ?? 'outra empresa'}. Use “Vincular contato ou lead” para trazer a pessoa para cá`);
+      }
+      ok(await supabase.from('contatos').insert({ ...dados, consentimento_em: contato.aceita_marketing ? new Date().toISOString() : null }));
+    }
     setContato(null);
     await carregar();
   }, 'Contato salvo');
@@ -79,6 +186,7 @@ export default function ContaDetalhe() {
           <p>{[conta.setor, conta.cidade && `${conta.cidade}/${conta.uf}`, conta.colaboradores && `${num(conta.colaboradores)} colaboradores`].filter(Boolean).join(' · ')} <Selo cor={ESTAGIOS[conta.estagio].cor}>{ESTAGIOS[conta.estagio].nome}</Selo></p>
         </div>
         <div className="acoes">
+          <button className="btn" onClick={abrirMesclar}>Mesclar empresa</button>
           <button className="btn" onClick={() => setContato({ ...contatoVazio })}>Novo contato</button>
           <button className="btn primario" disabled={ocupado} onClick={novaOportunidade}>Nova oportunidade</button>
         </div>
@@ -87,7 +195,25 @@ export default function ContaDetalhe() {
       <div className="detalhe">
         <div style={{ display: 'grid', gap: 16 }}>
           <div className="cartao">
-            <h2>Contatos</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <h2>Contatos {contatos.length > 0 && <span className="muted" style={{ fontWeight: 400 }}>({contatos.length})</span>}</h2>
+              <button className="btn pequeno" onClick={() => { setBusca(''); setTrazer(true); }}>Vincular contato ou lead</button>
+            </div>
+            {mesmoDominio.length > 0 && (
+              <div className="aviso info" style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ flex: '1 1 260px' }}><b>{mesmoDominio.length}</b> pessoa(s) com e-mail {dominios.map((d) => `@${d}`).join(' ou ')} ainda fora desta empresa.</span>
+                  <button className="btn pequeno primario" disabled={ocupado} onClick={trazerTodas}>Vincular todas</button>
+                </div>
+                {mesmoDominio.slice(0, 6).map((p) => (
+                  <div key={p.tipo + p.id} style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', fontSize: 13 }}>
+                    <span style={{ flex: '1 1 220px' }}>{p.nome} · {p.email} <span className="muted">({p.tipo === 'lead' ? 'lead' : p.conta_nome ? `contato de ${p.conta_nome}` : 'contato sem empresa'})</span></span>
+                    <button className="btn pequeno" disabled={ocupado} onClick={() => trazerUma(p, `mesmo domínio @${dominioDoEmail(p.email)}`)}>Vincular</button>
+                  </div>
+                ))}
+                {mesmoDominio.length > 6 && <span className="muted" style={{ fontSize: 13 }}>e mais {mesmoDominio.length - 6}.</span>}
+              </div>
+            )}
             {contatos.length === 0 ? <Vazio>Nenhum contato. Cadastre quem decide e quem usa o painel.</Vazio> : (
               <table className="tabela" style={{ marginTop: 8 }}><tbody>
                 {contatos.map((c) => (
@@ -140,7 +266,12 @@ export default function ContaDetalhe() {
                 const v = Number(e.target.value.replace(/\D/g, '')) || null;
                 if (v !== conta.colaboradores) atualizar({ colaboradores: v });
               }} /></dd>
-              <dt>Site</dt><dd>{conta.site ? <a href={conta.site.startsWith('http') ? conta.site : `https://${conta.site}`} target="_blank" rel="noreferrer">{conta.site}</a> : '—'}</dd>
+              <dt>Site</dt>
+              <dd><input defaultValue={conta.site ?? ''} placeholder="acme.com.br" onBlur={(e) => {
+                const v = e.target.value.trim() || null;
+                if (v !== conta.site) atualizar({ site: v });
+              }} /></dd>
+              <dt>Domínio</dt><dd>{dominios.length ? dominios.map((d) => `@${d}`).join(', ') : <span className="muted">preencha o site para achar as pessoas da empresa pelo e-mail</span>}</dd>
               <dt>Estágio</dt>
               <dd>
                 <select value={conta.estagio} onChange={(e) => atualizar({ estagio: e.target.value as Conta['estagio'] })}>
@@ -197,6 +328,30 @@ export default function ContaDetalhe() {
         )}
       </Modal>
       <EnviarEmail destino={email} fechar={() => setEmail(null)} enviado={() => setTick((t) => t + 1)} />
+
+      <Modal titulo={`Vincular pessoa à ${conta.nome}`} aberto={trazer} fechar={() => setTrazer(false)} largura={640}>
+        <div className="aviso info">Procure um lead ou um contato de outra empresa. Ele passa a ser contato desta empresa, junto com os outros.</div>
+        <input placeholder="Nome ou e-mail…" value={busca} onChange={(e) => setBusca(e.target.value)} autoFocus />
+        {busca.trim().length >= 2 && (achadas.length === 0 ? <p className="muted" style={{ marginTop: 10 }}>Ninguém encontrado fora desta empresa.</p> : (
+          <table className="tabela" style={{ marginTop: 8 }}><tbody>
+            {achadas.map((p) => (
+              <tr key={p.tipo + p.id}>
+                <td><strong>{p.nome}</strong><div className="muted">{[p.email, p.tipo === 'lead' ? 'lead' : p.conta_nome ? `contato de ${p.conta_nome}` : 'contato sem empresa'].filter(Boolean).join(' · ')}</div></td>
+                <td className="num"><button className="btn pequeno primario" disabled={ocupado} onClick={() => trazerUma(p, 'vínculo manual')}>Vincular</button></td>
+              </tr>
+            ))}
+          </tbody></table>
+        ))}
+      </Modal>
+
+      <EscolherConta titulo={`Mesclar ${conta.nome} em outra empresa`} aberto={mesclar && !destino} fechar={() => setMesclar(false)}
+        escolher={(c) => setDestino(c)} sugestoes={parecidas} excluir={conta.id} acao="Escolher"
+        aviso={<div className="aviso info">Use quando a mesma empresa foi cadastrada duas vezes. Escolha a empresa que fica: contatos, leads, oportunidades e histórico desta vão para ela.</div>} />
+      <Modal titulo="Confirmar mescla" aberto={mesclar && !!destino} fechar={() => setDestino(null)}
+        rodape={<><button className="btn" onClick={() => setDestino(null)}>Voltar</button><button className="btn primario" disabled={ocupado} onClick={fazerMescla}>Mesclar em {destino?.nome}</button></>}>
+        <p><b>{conta.nome}</b> vai ser juntada a <b>{destino?.nome}</b>: {contatos.length} contato(s), {ops.length} oportunidade(s), os leads e todo o histórico passam para lá, e o que {destino?.nome} não tiver preenchido (CNPJ, site, porte…) vem desta.</p>
+        <div className="aviso erro">Depois disso, {conta.nome} deixa de existir. Não dá para desfazer.</div>
+      </Modal>
     </>
   );
 }

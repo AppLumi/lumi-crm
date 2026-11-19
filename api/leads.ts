@@ -2,6 +2,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { admin, consultarCnpj, cors, emailValido, enviarEmail, esc, soDigitos, texto } from './_lib.js';
 import { cnpjValido, notaPerfil, PESOS_EVENTOS, pisoDaFaixa } from '../shared/pontuacao.js';
+import { contaCertaDoLead, vincularLeadAConta } from '../shared/empresas.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (cors(req, res)) return;
@@ -51,6 +52,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }).select('id').single();
     if (error) { console.error('lead:', error.message); return res.status(500).json({ erro: 'Não foi possível registrar agora' }); }
     leadId = data.id;
+    // empresa já cadastrada (mesmo CNPJ ou único dono do domínio do e-mail): a pessoa entra como contato dela
+    try {
+      const achou = await contaCertaDoLead(db, { cnpj, email });
+      if (achou) await vincularLeadAConta(db, { id: data.id, nome, email, whatsapp, cargo: texto(b.cargo, 120), aceita_marketing: aceita,
+        consentimento_em: aceita ? new Date().toISOString() : null }, achou.conta, { motivo: achou.motivo, moverContato: false });
+    } catch (e) { console.error('lead empresa:', (e as Error).message); }
   }
   await db.from('eventos').insert({ nome: tipoEvento, origem: texto(b.origem, 60) ?? 'site', lead_id: leadId,
     propriedades: { pagina: texto(b.pagina, 300), evento: texto(b.evento, 120), utm_campaign: texto(b.utm_campaign, 120) } });
