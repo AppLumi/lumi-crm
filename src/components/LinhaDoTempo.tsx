@@ -5,7 +5,7 @@ import { TIPOS_ATIVIDADE, dataHora, relativo } from '../lib/formato';
 import type { Atividade, TipoAtividade } from '../lib/tipos';
 import { Campo, Vazio } from './ui';
 
-type Alvo = { lead_id?: string; conta_id?: string; oportunidade_id?: string; contato_id?: string };
+type Alvo = { lead_id?: string; conta_id?: string; oportunidade_id?: string; contato_id?: string; card_id?: string };
 
 /** Linha do tempo de uma entidade + formulário rápido de registro (nota, ligação, reunião, WhatsApp, tarefa). */
 export default function LinhaDoTempo({ alvo, filtro, atualizar }: { alvo: Alvo; filtro: { coluna: string; valor: string }; atualizar?: number }) {

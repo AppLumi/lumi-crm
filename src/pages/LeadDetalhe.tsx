@@ -8,6 +8,7 @@ import { Campo, Carregando, Modal, Nota, Selo } from '../components/ui';
 import LinhaDoTempo from '../components/LinhaDoTempo';
 import EnviarEmail, { type DestinoEmail } from '../components/EnviarEmail';
 import EscolherConta, { type Sugestao } from '../components/EscolherConta';
+import NosFunis from '../components/NosFunis';
 import { contasPorDominio, dominioDoEmail, vincularLeadAConta, type ContaResumo } from '../../shared/empresas';
 
 interface Evento { id: string; nome: string; origem: string; criado_em: string }
@@ -214,6 +215,9 @@ export default function LeadDetalhe() {
               </dl>
             </div>
           )}
+
+          <NosFunis filtro={{ coluna: 'lead_id', valor: lead.id }} base={{ titulo: lead.empresa || lead.nome, nome: lead.nome, email: lead.email, whatsapp: lead.whatsapp,
+            empresa: lead.empresa, conta_id: lead.conta_id, contato_id: lead.contato_id, lead_id: lead.id, aceita_marketing: lead.aceita_marketing }} />
 
           <div className="cartao">
             <h2>Sinais de interesse</h2>

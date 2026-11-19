@@ -9,6 +9,7 @@ import LinhaDoTempo from '../components/LinhaDoTempo';
 import EnviarEmail, { type DestinoEmail } from '../components/EnviarEmail';
 import { ESTAGIOS, type DadosCnpj } from './Contas';
 import EscolherConta, { type Sugestao } from '../components/EscolherConta';
+import NosFunis from '../components/NosFunis';
 import { contasPorDominio, dominioDoEmail, dominiosDaConta, vincularLeadAConta, type ContaResumo } from '../../shared/empresas';
 
 interface Pessoa { tipo: 'lead' | 'contato'; id: string; nome: string; email: string | null; cargo: string | null; whatsapp: string | null;
@@ -122,6 +123,7 @@ export default function ContaDetalhe() {
     for (const t of ['contatos', 'leads', 'oportunidades', 'atividades', 'eventos', 'emails'] as const) {
       ok(await supabase.from(t).update({ conta_id: a.id }).eq('conta_id', conta.id));
     }
+    await supabase.from('funil_cards').update({ conta_id: a.id }).eq('conta_id', conta.id); // funis próprios (se a migração 0002 já rodou)
     // o destino herda o que não tinha
     const herda: Partial<Conta> = {};
     (['razao_social', 'cnae', 'setor', 'porte', 'colaboradores', 'cidade', 'uf', 'site', 'lumi_cliente_id', 'dono', 'origem'] as const)
@@ -292,6 +294,7 @@ export default function ContaDetalhe() {
               }} /></dd>
             </dl>
           </div>
+          <NosFunis filtro={{ coluna: 'conta_id', valor: conta.id }} base={{ titulo: conta.nome, empresa: conta.nome, conta_id: conta.id }} />
           <div className="cartao">
             <h2>Notas da conta</h2>
             <textarea style={{ marginTop: 8, minHeight: 120 }} value={notas ?? conta.notas ?? ''} onChange={(e) => setNotas(e.target.value)} placeholder="Contexto que todo o time precisa saber" />

@@ -249,6 +249,10 @@ textarea { min-height: 110px; resize: vertical; }
 .abas button:hover:not(:disabled) { color: var(--noite); }
 .abas button:disabled { cursor: default; opacity: 0.55; }
 .abas button.ativa { color: var(--noite); background: rgba(255, 255, 255, 0.95); box-shadow: var(--brilho), 0 2px 8px -3px rgba(6, 27, 74, 0.3), inset 0 -2px 0 var(--lima); }
+.abas a { padding: 7px 13px; border-radius: 11px; color: var(--tinta-2); font-weight: 600; white-space: nowrap; text-decoration: none;
+  transition: background 0.25s, color 0.25s, box-shadow 0.25s; }
+.abas a:hover { color: var(--noite); }
+.abas a.ativa { color: var(--noite); background: rgba(255, 255, 255, 0.95); box-shadow: var(--brilho), 0 2px 8px -3px rgba(6, 27, 74, 0.3), inset 0 -2px 0 var(--lima); }
 .abas .selo { align-self: center; margin-left: 6px; }
 
 /* ---------- funil (kanban) ---------- */

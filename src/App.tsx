@@ -22,6 +22,9 @@ const Emails = lazy(() => import('./pages/Emails'));
 const Relatorios = lazy(() => import('./pages/Relatorios'));
 const Configuracoes = lazy(() => import('./pages/Configuracoes'));
 const PropostaPublica = lazy(() => import('./pages/PropostaPublica'));
+const FunilPersonalizado = lazy(() => import('./pages/FunilPersonalizado'));
+const CardDetalhe = lazy(() => import('./pages/CardDetalhe'));
+const FormularioFunil = lazy(() => import('./pages/FormularioFunil'));
 
 /** Área logada: mostra o splash até o perfil carregar (e um tempo mínimo para a animação respirar). */
 function Protegido() {
@@ -93,6 +96,7 @@ export default function App() {
     <Suspense fallback={<Splash />}>
       <Routes>
         <Route path="/p/:token" element={<PropostaPublica />} />
+        <Route path="/f/:slug" element={<FormularioFunil />} />
         <Route path="*" element={
           <SessaoProvider>
             <Routes>
@@ -103,6 +107,8 @@ export default function App() {
                 <Route path="leads" element={<Leads />} />
                 <Route path="leads/:id" element={<LeadDetalhe />} />
                 <Route path="funil" element={<Funil />} />
+                <Route path="funis/:id" element={<FunilPersonalizado />} />
+                <Route path="cards/:id" element={<CardDetalhe />} />
                 <Route path="oportunidades/:id" element={<OportunidadeDetalhe />} />
                 <Route path="contas" element={<Contas />} />
                 <Route path="contas/:id" element={<ContaDetalhe />} />

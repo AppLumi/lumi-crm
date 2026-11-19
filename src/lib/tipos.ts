@@ -53,3 +53,16 @@ export interface Atividade {
 }
 
 export interface ModeloEmail { id: string; nome: string; categoria: string; assunto: string; corpo: string; ativo: boolean }
+
+export interface Funil {
+  id: string; nome: string; descricao: string | null; campos: import('../../shared/funis').CampoFunil[]; mostra_valor: boolean; pede_empresa: boolean;
+  slug: string | null; formulario_publico: boolean; formulario_titulo: string | null; formulario_texto: string | null; formulario_obrigado: string | null;
+  avisar: string | null; dono_padrao: string | null; ativo: boolean; ordem: number; criado_em: string;
+}
+export interface EtapaFunil { id: string; funil_id: string; nome: string; ordem: number; tipo: 'aberta' | 'ganha' | 'perdida'; prazo_dias: number | null }
+export interface CardFunil {
+  id: string; funil_id: string; etapa_id: string; titulo: string; nome: string | null; email: string | null; whatsapp: string | null; empresa: string | null;
+  conta_id: string | null; contato_id: string | null; lead_id: string | null; valor: number | null; dono: string | null; dados: Record<string, unknown>;
+  origem: string; aceita_marketing: boolean; consentimento_em: string | null; etapa_desde: string; fechado_em: string | null; motivo_perda: string | null;
+  criado_em: string; etapa_nome: string; etapa_tipo: 'aberta' | 'ganha' | 'perdida'; etapa_ordem: number; dono_nome: string | null; conta_nome: string | null; dias_na_etapa: number;
+}

@@ -6,6 +6,7 @@ import { ETAPAS, brl, primeiroNome } from '../lib/formato';
 import type { Etapa, Oportunidade } from '../lib/tipos';
 import { Carregando, Kpi } from '../components/ui';
 import MudarEtapa, { moverEtapa, pendencias } from '../components/MudarEtapa';
+import FunisAbas from '../components/FunisAbas';
 
 export default function Funil() {
   const ir = useNavigate();
@@ -40,8 +41,9 @@ export default function Funil() {
 
   return (
     <>
+      <FunisAbas />
       <div className="topo">
-        <div><h1>Funil</h1><p>Arraste as oportunidades entre as etapas. Fichas com borda amarela passaram do prazo da etapa.</p></div>
+        <div><h1>Vendas Lumi</h1><p>Arraste as oportunidades entre as etapas. Fichas com borda amarela passaram do prazo da etapa.</p></div>
         <div className="filtros" style={{ margin: 0 }}>
           <select value={dono} onChange={(e) => setDono(e.target.value)}>
             <option value="">Todo o time</option>

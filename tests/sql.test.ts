@@ -22,6 +22,9 @@ beforeAll(async () => {
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('test.uid', true), '')::uuid $$;
   `);
   await db.exec(readFileSync(new URL('../supabase/migrations/0001_crm.sql', import.meta.url), 'utf8'));
+  await db.exec(readFileSync(new URL('../supabase/migrations/0002_funis.sql', import.meta.url), 'utf8'));
+  // a 0002 pode rodar de novo sem quebrar
+  await db.exec(readFileSync(new URL('../supabase/migrations/0002_funis.sql', import.meta.url), 'utf8'));
   await db.exec(`
     insert into auth.users values ('${SOCIA}', 'socia@applumi.io'), ('${BRUNA}', 'bruna@applumi.io');
     insert into perfis (id, nome, email, papel, aprova_desconto) values
@@ -71,6 +74,31 @@ describe('migração', () => {
     const ok = await db.query<{ aprovado_em: string | null }>(`select aprovado_em from propostas where id = $1`, [pid]);
     expect(ok.rows[0].aprovado_em).not.toBeNull();
     await expect(como(SOCIA, base, [rows[0].id, 3, 25, 'rascunho'])).rejects.toThrow(/20%/);
+  });
+
+  it('funis personalizados: etapa do mesmo funil, relógio da etapa e fechamento', async () => {
+    const f = await db.query<{ id: string }>(`insert into funis (nome, slug) values ('Parceiros', 'parceiros') returning id`);
+    const g = await db.query<{ id: string }>(`insert into funis (nome) values ('Outro') returning id`);
+    const et = await db.query<{ id: string }>(`insert into funil_etapas (funil_id, nome, ordem, tipo) values
+      ($1, 'Mapeado', 0, 'aberta'), ($1, 'Ativo', 1, 'ganha'), ($1, 'Não seguiu', 2, 'perdida') returning id`, [f.rows[0].id]);
+    const outra = await db.query<{ id: string }>(`insert into funil_etapas (funil_id, nome) values ($1, 'X') returning id`, [g.rows[0].id]);
+    await expect(db.query(`insert into funil_cards (funil_id, etapa_id, titulo) values ($1, $2, 'Errado')`, [f.rows[0].id, outra.rows[0].id])).rejects.toThrow(/não é deste funil/);
+    const c = await como(BRUNA, `insert into funil_cards (funil_id, etapa_id, titulo, dados) values ($1, $2, 'Consultoria X', '{"comissao_pct": 10}') returning id`, [f.rows[0].id, et.rows[0].id]);
+    const card = (c.rows[0] as { id: string }).id;
+    await db.query(`update funil_cards set etapa_id = $2, motivo_perda = 'sem fit' where id = $1`, [card, et.rows[2].id]);
+    let v = await db.query<{ fechado_em: string | null; motivo_perda: string | null; etapa_tipo: string }>(`select fechado_em, motivo_perda, etapa_tipo from v_funil_cards where id = $1`, [card]);
+    expect(v.rows[0].fechado_em).not.toBeNull();
+    expect(v.rows[0].motivo_perda).toBe('sem fit');
+    await db.query(`update funil_cards set etapa_id = $2 where id = $1`, [card, et.rows[0].id]);
+    v = await db.query(`select fechado_em, motivo_perda, etapa_tipo from v_funil_cards where id = $1`, [card]);
+    expect(v.rows[0]).toEqual({ fechado_em: null, motivo_perda: null, etapa_tipo: 'aberta' });
+    // não apaga etapa com card; apagar o funil leva tudo junto
+    await expect(db.query(`delete from funil_etapas where id = $1`, [et.rows[0].id])).rejects.toThrow();
+    await db.query(`insert into atividades (tipo, titulo, card_id) values ('nota', 'oi', $1)`, [card]);
+    await db.query(`delete from funis where id = $1`, [f.rows[0].id]);
+    const resto = await db.query(`select 1 from atividades where card_id = $1`, [card]);
+    expect(resto.rows.length).toBe(0);
+    await expect(db.query(`insert into funis (nome, slug) values ('Y', 'Com Espaço')`)).rejects.toThrow();
   });
 
   it('ninguém muda o próprio papel', async () => {

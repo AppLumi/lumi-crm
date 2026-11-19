@@ -15,7 +15,7 @@ const GRUPOS: { titulo: string; itens: Item[] }[] = [
   {
     titulo: 'Vendas', itens: [
       { para: '/leads', nome: 'Leads', icone: 'leads', contador: 'leads' },
-      { para: '/funil', nome: 'Funil', icone: 'funil' },
+      { para: '/funil', nome: 'Funis', icone: 'funil' },
       { para: '/propostas', nome: 'Propostas', icone: 'propostas', contador: 'aprovacoes' },
       { para: '/contas', nome: 'Contas', icone: 'contas' },
     ],
@@ -28,7 +28,7 @@ const MOVEL = ['/', '/leads', '/funil', '/tarefas'];
 const PAPEIS = { socia: 'Sócia', negocios: 'Negócios', marketing: 'Marketing', tecnologia: 'Tecnologia' } as const;
 
 const ehAtivo = (para: string, caminho: string) =>
-  para === '/' ? caminho === '/' : caminho.startsWith(para) || (para === '/funil' && caminho.startsWith('/oportunidades'));
+  para === '/' ? caminho === '/' : caminho.startsWith(para) || (para === '/funil' && /^\/(oportunidades|funis|cards)\//.test(caminho));
 
 const lerPreferencia = () => { try { return localStorage.getItem('lumi-crm:menu') === 'recolhido'; } catch { return false; } };
 const semMovimento = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;

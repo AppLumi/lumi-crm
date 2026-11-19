@@ -36,7 +36,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const id = await enviarEmail({ para: [para], assunto, texto: corpo, html: textoParaHtml(corpo), responderPara: quem.perfil.email, de });
     await db.from('emails').update({ status: 'enviado', resend_id: id, enviado_em: new Date().toISOString() }).eq('id', reg.id);
-    await db.from('atividades').insert({ tipo: 'email', titulo: `E-mail enviado: ${assunto}`, descricao: corpo, autor: quem.perfil.id, ...ref });
+    const cardId = texto(b.card_id, 40);
+    await db.from('atividades').insert({ tipo: 'email', titulo: `E-mail enviado: ${assunto}`, descricao: corpo, autor: quem.perfil.id, ...ref, ...(cardId ? { card_id: cardId } : {}) });
     if (ref.lead_id) await db.from('leads').update({ status: 'em_contato', primeiro_contato_em: new Date().toISOString() })
       .eq('id', ref.lead_id).is('primeiro_contato_em', null);
     return res.status(200).json({ ok: true, id: reg.id });

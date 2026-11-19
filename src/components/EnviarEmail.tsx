@@ -7,7 +7,7 @@ import { Campo, Modal } from './ui';
 
 export interface DestinoEmail {
   para: string; nome: string; empresa?: string | null;
-  lead_id?: string; contato_id?: string; conta_id?: string; oportunidade_id?: string;
+  lead_id?: string; contato_id?: string; conta_id?: string; oportunidade_id?: string; card_id?: string;
   extras?: Record<string, string>;
 }
 
@@ -40,7 +40,7 @@ export default function EnviarEmail({ destino, fechar, enviado }: { destino: Des
   const enviar = () => executar(async () => {
     if (/\{\{\w+\}\}/.test(assunto + corpo)) throw new Error('Ainda há campos {{…}} sem preencher no texto');
     if (/\[[^\]]+\]/.test(corpo)) throw new Error('Troque os trechos entre colchetes antes de enviar');
-    await api('emails/enviar', { corpo: { para: destino.para, assunto, corpo, lead_id: destino.lead_id, contato_id: destino.contato_id, conta_id: destino.conta_id, oportunidade_id: destino.oportunidade_id } });
+    await api('emails/enviar', { corpo: { para: destino.para, assunto, corpo, lead_id: destino.lead_id, contato_id: destino.contato_id, conta_id: destino.conta_id, oportunidade_id: destino.oportunidade_id, card_id: destino.card_id } });
     enviado?.();
     fechar();
   }, 'E-mail enviado');
