@@ -137,8 +137,8 @@ export default function FunilPersonalizado() {
                 {fichas.map((c) => (
                   <article key={c.id} className={`ficha ${e.prazo_dias != null && e.tipo === 'aberta' && c.dias_na_etapa > e.prazo_dias ? 'parada' : ''}`} draggable
                     onDragStart={(ev) => ev.dataTransfer.setData('text/plain', c.id)} onClick={() => ir(`/cards/${c.id}`)}>
-                    <div className="conta">{c.titulo}</div>
-                    <div className="muted" style={{ fontSize: 12 }}>{c.conta_nome ?? (c.titulo !== c.nome ? c.nome : c.email) ?? ''}{c.origem === 'formulario' ? ' · formulário' : ''}</div>
+                    <div className="conta">{c.nome || c.titulo}</div>
+                    <div className="muted" style={{ fontSize: 12 }}>{[c.conta_nome ?? c.empresa, c.nome && c.titulo !== c.nome && c.titulo !== (c.conta_nome ?? c.empresa) ? c.titulo : null].filter(Boolean).join(' · ') || c.email || ''}{c.origem === 'formulario' ? ' · formulário' : ''}</div>
                     <div className="meta">
                       <span>{funil.mostra_valor ? (c.valor ? brl(Number(c.valor)) : 'sem valor') : ''}</span>
                       <span>{primeiroNome(c.dono_nome) || '—'} · {c.dias_na_etapa}d</span>

@@ -75,7 +75,7 @@ interface LeadVinculo {
  * sem isso, deixa como está (vínculo automático não tira ninguém de onde a equipe colocou).
  */
 export async function vincularLeadAConta(db: SupabaseClient, lead: LeadVinculo, conta: ContaResumo,
-  opcoes: { autor?: string | null; motivo: string; moverContato: boolean }): Promise<{ contatoId: string | null; moveu: boolean }> {
+  opcoes: { autor?: string | null; motivo: string; moverContato: boolean; converter?: boolean }): Promise<{ contatoId: string | null; moveu: boolean }> {
   let contatoId: string | null = null, moveu = false;
   const email = lead.email?.trim().toLowerCase() || null;
   const { data: existente } = email
@@ -98,6 +98,8 @@ export async function vincularLeadAConta(db: SupabaseClient, lead: LeadVinculo, 
   }
   const r = await db.from('leads').update({ conta_id: conta.id, contato_id: contatoId }).eq('id', lead.id);
   if (r.error) throw new Error(r.error.message);
+  // mescla manual: a pessoa passa a ser contato da empresa e sai da lista de leads (se ainda não virou negócio)
+  if (opcoes.converter) await db.from('leads').update({ status: 'convertido' }).eq('id', lead.id).is('oportunidade_id', null);
   await db.from('atividades').update({ conta_id: conta.id }).eq('lead_id', lead.id).is('oportunidade_id', null);
   await db.from('eventos').update({ conta_id: conta.id }).eq('lead_id', lead.id);
   await db.from('atividades').insert({

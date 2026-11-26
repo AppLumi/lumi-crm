@@ -10,6 +10,9 @@ import EnviarEmail, { type DestinoEmail } from '../components/EnviarEmail';
 import { ESTAGIOS, type DadosCnpj } from './Contas';
 import EscolherConta, { type Sugestao } from '../components/EscolherConta';
 import NosFunis from '../components/NosFunis';
+import MoverParaFunil from '../components/MoverParaFunil';
+import { pessoaDeContato, type PessoaFunil } from '../lib/funis';
+import { cnpjValido } from '../../shared/pontuacao';
 import { contasPorDominio, dominioDoEmail, dominiosDaConta, vincularLeadAConta, type ContaResumo } from '../../shared/empresas';
 
 interface Pessoa { tipo: 'lead' | 'contato'; id: string; nome: string; email: string | null; cargo: string | null; whatsapp: string | null;
@@ -39,7 +42,7 @@ async function procurarPessoas(contaId: string, filtro: { dominios?: string[]; b
   return [...contatos, ...leads].filter(doDominio);
 }
 
-const contatoVazio = { id: '', nome: '', cargo: '', papel: 'outro', email: '', whatsapp: '', linkedin: '', aceita_marketing: false };
+const contatoVazio = { id: '', nome: '', cargo: '', papel: 'outro', email: '', whatsapp: '', linkedin: '', aceita_marketing: false, conta_id: '' as string, conta_nome: '' as string };
 
 export default function ContaDetalhe() {
   const { id } = useParams<{ id: string }>();
@@ -60,6 +63,9 @@ export default function ContaDetalhe() {
   const [mesclar, setMesclar] = useState(false);
   const [destino, setDestino] = useState<ContaResumo | null>(null);
   const [parecidas, setParecidas] = useState<Sugestao[]>([]);
+  const [editarConta, setEditarConta] = useState<Record<string, string> | null>(null);
+  const [trocarEmpresa, setTrocarEmpresa] = useState(false);
+  const [paraFunil, setParaFunil] = useState<PessoaFunil[] | null>(null);
 
   const carregar = useCallback(async () => {
     const [c, ct, o] = await Promise.all([
@@ -88,7 +94,7 @@ export default function ContaDetalhe() {
   /** Traz uma pessoa para esta empresa: o contato muda de empresa; o lead vira contato daqui. */
   const vincularPessoa = async (p: Pessoa, motivo: string) => {
     if (p.tipo === 'lead') {
-      await vincularLeadAConta(supabase, p, resumo, { autor: perfil?.id, motivo, moverContato: true });
+      await vincularLeadAConta(supabase, p, resumo, { autor: perfil?.id, motivo, moverContato: true, converter: true });
       return;
     }
     ok(await supabase.from('contatos').update({ conta_id: conta.id }).eq('id', p.id));
@@ -157,7 +163,7 @@ export default function ContaDetalhe() {
     if (!contato) return;
     if (!contato.nome.trim()) throw new Error('Informe o nome');
     const dados = {
-      conta_id: conta.id, nome: contato.nome.trim(), cargo: contato.cargo.trim() || null, papel: contato.papel,
+      conta_id: contato.conta_id || conta.id, nome: contato.nome.trim(), cargo: contato.cargo.trim() || null, papel: contato.papel,
       email: contato.email.trim().toLowerCase() || null, whatsapp: contato.whatsapp.replace(/\D/g, '') || null,
       linkedin: contato.linkedin.trim() || null, aceita_marketing: contato.aceita_marketing,
     };
@@ -169,9 +175,44 @@ export default function ContaDetalhe() {
       }
       ok(await supabase.from('contatos').insert({ ...dados, consentimento_em: contato.aceita_marketing ? new Date().toISOString() : null }));
     }
+    if (contato.id && contato.conta_id && contato.conta_id !== conta.id) {
+      await supabase.from('leads').update({ conta_id: contato.conta_id }).eq('contato_id', contato.id).is('oportunidade_id', null);
+      await supabase.from('atividades').insert({ tipo: 'sistema', titulo: `${dados.nome} passou para a empresa ${contato.conta_nome}`, conta_id: contato.conta_id, contato_id: contato.id, autor: perfil?.id });
+    }
     setContato(null);
     await carregar();
   }, 'Contato salvo');
+
+  const excluirContato = () => executar(async () => {
+    if (!contato?.id) return;
+    ok(await supabase.from('contatos').delete().eq('id', contato.id));
+    setContato(null);
+    await carregar();
+  }, 'Contato excluído');
+
+  const abrirEdicaoConta = () => setEditarConta({
+    nome: conta.nome, razao_social: conta.razao_social ?? '', cnpj: conta.cnpj ?? '', cnae: conta.cnae ?? '', setor: conta.setor ?? '',
+    porte: conta.porte ?? '', colaboradores: conta.colaboradores ? String(conta.colaboradores) : '', cidade: conta.cidade ?? '', uf: conta.uf ?? '',
+    site: conta.site ?? '', origem: conta.origem ?? '', lumi_cliente_id: conta.lumi_cliente_id ?? '',
+  });
+  const salvarConta = () => executar(async () => {
+    if (!editarConta) return;
+    const t = (k: string) => (editarConta[k] ?? '').trim();
+    if (!t('nome')) throw new Error('Informe o nome da empresa');
+    const cnpj = t('cnpj').replace(/\D/g, '');
+    if (cnpj && !cnpjValido(cnpj)) throw new Error('CNPJ inválido');
+    if (cnpj && cnpj !== conta.cnpj) {
+      const { data: outra } = await supabase.from('contas').select('id, nome').eq('cnpj', cnpj).neq('id', conta.id).maybeSingle();
+      if (outra) throw new Error(`Esse CNPJ já é da empresa ${(outra as { nome: string }).nome}. Use “Mesclar empresa” para juntar as duas`);
+    }
+    ok(await supabase.from('contas').update({
+      nome: t('nome'), razao_social: t('razao_social') || null, cnpj: cnpj || null, cnae: t('cnae') || null, setor: t('setor') || null,
+      porte: t('porte') || null, colaboradores: Number(t('colaboradores').replace(/\D/g, '')) || null, cidade: t('cidade') || null,
+      uf: t('uf').toUpperCase().slice(0, 2) || null, site: t('site') || null, origem: t('origem') || null, lumi_cliente_id: t('lumi_cliente_id') || null,
+    }).eq('id', conta.id));
+    setEditarConta(null);
+    await carregar();
+  }, 'Empresa salva');
 
   const novaOportunidade = () => executar(async () => {
     const r = ok(await supabase.from('oportunidades').insert({ conta_id: conta.id, titulo: `Lumi · ${conta.nome}`, vidas: conta.colaboradores, dono: perfil?.id }).select('id').single());
@@ -220,14 +261,15 @@ export default function ContaDetalhe() {
               <table className="tabela" style={{ marginTop: 8 }}><tbody>
                 {contatos.map((c) => (
                   <tr key={c.id}>
-                    <td><strong>{c.nome}</strong><div className="muted">{c.cargo ?? ''}</div></td>
+                    <td style={{ minWidth: 0 }}><strong>{c.nome}</strong><div className="muted">{c.cargo ?? ''}</div></td>
                     <td><Selo cor={c.papel === 'decisor' ? 'lima' : ''}>{PAPEIS_CONTATO[c.papel]}</Selo>{c.descadastrado_em && <Selo cor="vermelho">descadastrado</Selo>}</td>
-                    <td>{c.email ?? '—'}<div className="muted">{c.whatsapp ?? ''}</div></td>
-                    <td className="num" style={{ whiteSpace: 'nowrap' }}>
+                    <td style={{ wordBreak: 'break-word' }}>{c.email ?? '—'}<div className="muted">{c.whatsapp ?? ''}</div></td>
+                    <td className="num"><div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'flex-end' }}>
                       {c.email && !c.descadastrado_em && <button className="btn pequeno" onClick={() => setEmail({ para: c.email!, nome: c.nome, empresa: conta.nome, contato_id: c.id, conta_id: conta.id })}>E-mail</button>}
                       {zapLink(c.whatsapp) && <a className="btn pequeno" href={zapLink(c.whatsapp)!} target="_blank" rel="noreferrer">WhatsApp</a>}
-                      <button className="btn pequeno" onClick={() => setContato({ id: c.id, nome: c.nome, cargo: c.cargo ?? '', papel: c.papel, email: c.email ?? '', whatsapp: c.whatsapp ?? '', linkedin: c.linkedin ?? '', aceita_marketing: c.aceita_marketing })}>Editar</button>
-                    </td>
+                      <button className="btn pequeno" onClick={() => setParaFunil([pessoaDeContato({ ...c, conta_nome: conta.nome })])}>Funil</button>
+                      <button className="btn pequeno" onClick={() => setContato({ id: c.id, nome: c.nome, cargo: c.cargo ?? '', papel: c.papel, email: c.email ?? '', whatsapp: c.whatsapp ?? '', linkedin: c.linkedin ?? '', aceita_marketing: c.aceita_marketing, conta_id: conta.id, conta_nome: conta.nome })}>Editar</button>
+                    </div></td>
                   </tr>
                 ))}
               </tbody></table>
@@ -256,13 +298,17 @@ export default function ContaDetalhe() {
           <div className="cartao">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2>Cadastro</h2>
-              {conta.cnpj && <button className="btn pequeno" disabled={ocupado} onClick={atualizarCnpj}>Atualizar da Receita</button>}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {conta.cnpj && <button className="btn pequeno" disabled={ocupado} onClick={atualizarCnpj}>Atualizar da Receita</button>}
+                <button className="btn pequeno" onClick={abrirEdicaoConta}>Editar</button>
+              </div>
             </div>
             <dl className="dados" style={{ marginTop: 10 }}>
               <dt>CNPJ</dt><dd>{cnpjFmt(conta.cnpj)}</dd>
               <dt>Razão social</dt><dd>{conta.razao_social ?? '—'}</dd>
               <dt>Atividade</dt><dd>{conta.cnae ? `${conta.cnae} · ${conta.setor ?? ''}` : '—'}</dd>
               <dt>Porte</dt><dd>{conta.porte ?? '—'}</dd>
+              <dt>Cidade</dt><dd>{conta.cidade ? `${conta.cidade}${conta.uf ? `/${conta.uf}` : ''}` : '—'}</dd>
               <dt>Colaboradores</dt>
               <dd><input inputMode="numeric" defaultValue={conta.colaboradores ?? ''} onBlur={(e) => {
                 const v = Number(e.target.value.replace(/\D/g, '')) || null;
@@ -305,8 +351,8 @@ export default function ContaDetalhe() {
         </div>
       </div>
 
-      <Modal titulo={contato?.id ? 'Editar contato' : 'Novo contato'} aberto={!!contato} fechar={() => setContato(null)}
-        rodape={<><button className="btn" onClick={() => setContato(null)}>Cancelar</button><button className="btn primario" disabled={ocupado} onClick={salvarContato}>Salvar</button></>}>
+      <Modal titulo={contato?.id ? 'Editar contato' : 'Novo contato'} aberto={!!contato && !trocarEmpresa} fechar={() => setContato(null)}
+        rodape={<>{contato?.id && <button className="btn perigo" style={{ marginRight: 'auto' }} disabled={ocupado} onClick={excluirContato}>Excluir contato</button>}<button className="btn" onClick={() => setContato(null)}>Cancelar</button><button className="btn primario" disabled={ocupado} onClick={salvarContato}>Salvar</button></>}>
         {contato && (
           <>
             <div className="linha-campos">
@@ -323,6 +369,14 @@ export default function ContaDetalhe() {
               <Campo rotulo="WhatsApp"><input value={contato.whatsapp} onChange={(e) => setContato({ ...contato, whatsapp: e.target.value })} /></Campo>
             </div>
             <Campo rotulo="LinkedIn"><input value={contato.linkedin} onChange={(e) => setContato({ ...contato, linkedin: e.target.value })} /></Campo>
+            {contato.id && (
+              <Campo rotulo="Empresa">
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span style={{ flex: 1 }}>{contato.conta_nome || conta.nome}</span>
+                  <button type="button" className="btn pequeno" onClick={() => setTrocarEmpresa(true)}>Trocar empresa</button>
+                </div>
+              </Campo>
+            )}
             <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <input type="checkbox" style={{ width: 'auto' }} checked={contato.aceita_marketing} onChange={(e) => setContato({ ...contato, aceita_marketing: e.target.checked })} />
               Autorizou receber conteúdos do Lumi
@@ -331,6 +385,27 @@ export default function ContaDetalhe() {
         )}
       </Modal>
       <EnviarEmail destino={email} fechar={() => setEmail(null)} enviado={() => setTick((t) => t + 1)} />
+      <EscolherConta titulo={`Empresa de ${contato?.nome ?? ''}`} aberto={trocarEmpresa} fechar={() => setTrocarEmpresa(false)} excluir={contato?.conta_id || conta.id}
+        escolher={(c) => { if (contato) setContato({ ...contato, conta_id: c.id, conta_nome: c.nome }); setTrocarEmpresa(false); }} acao="Escolher"
+        aviso={<div className="aviso info">O contato passa para a empresa escolhida quando você salvar.</div>} />
+      <MoverParaFunil pessoas={paraFunil} fechar={() => setParaFunil(null)} concluido={carregar} />
+      <Modal titulo="Editar empresa" aberto={!!editarConta} fechar={() => setEditarConta(null)} largura={700}
+        rodape={<><button className="btn" onClick={() => setEditarConta(null)}>Cancelar</button><button className="btn primario" disabled={ocupado} onClick={salvarConta}>Salvar</button></>}>
+        {editarConta && (() => {
+          const campo = (k: string, rotulo: string, ph?: string) => (
+            <Campo rotulo={rotulo}><input value={editarConta[k] ?? ''} placeholder={ph} onChange={(e) => setEditarConta({ ...editarConta, [k]: e.target.value })} /></Campo>
+          );
+          return (
+            <>
+              <div className="linha-campos">{campo('nome', 'Nome')}{campo('razao_social', 'Razão social')}</div>
+              <div className="linha-campos">{campo('cnpj', 'CNPJ')}{campo('colaboradores', 'Colaboradores')}{campo('porte', 'Porte')}</div>
+              <div className="linha-campos">{campo('cnae', 'CNAE')}{campo('setor', 'Atividade / setor')}</div>
+              <div className="linha-campos">{campo('cidade', 'Cidade')}{campo('uf', 'UF')}{campo('site', 'Site', 'acme.com.br')}</div>
+              <div className="linha-campos">{campo('origem', 'Origem')}{campo('lumi_cliente_id', 'ID no admin Lumi')}</div>
+            </>
+          );
+        })()}
+      </Modal>
 
       <Modal titulo={`Vincular pessoa à ${conta.nome}`} aberto={trazer} fechar={() => setTrazer(false)} largura={640}>
         <div className="aviso info">Procure um lead ou um contato de outra empresa. Ele passa a ser contato desta empresa, junto com os outros.</div>

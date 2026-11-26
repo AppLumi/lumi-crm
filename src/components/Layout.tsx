@@ -17,6 +17,7 @@ const GRUPOS: { titulo: string; itens: Item[] }[] = [
       { para: '/leads', nome: 'Leads', icone: 'leads', contador: 'leads' },
       { para: '/funil', nome: 'Funis', icone: 'funil' },
       { para: '/propostas', nome: 'Propostas', icone: 'propostas', contador: 'aprovacoes' },
+      { para: '/contatos', nome: 'Contatos', icone: 'leads' },
       { para: '/contas', nome: 'Contas', icone: 'contas' },
     ],
   },

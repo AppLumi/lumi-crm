@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ok, supabase } from '../lib/supabase';
 import { useAcao, useSessao } from '../lib/sessao';
 import { STATUS_LEAD, nomeOrigem, relativo } from '../lib/formato';
 import type { Lead, StatusLead } from '../lib/tipos';
 import { Campo, Carregando, Modal, Nota, Selo, Vazio } from '../components/ui';
 import { cnpjValido, notaPerfil } from '../../shared/pontuacao';
-import { lerLista, nomeSuspeito } from '../../shared/importacao';
+import { nomeSuspeito } from '../../shared/importacao';
 import DisparoEmail from '../components/DisparoEmail';
-import { contasPorDominio, dominioDoEmail, vincularLeadAConta, type ContaResumo } from '../../shared/empresas';
+import MoverParaFunil from '../components/MoverParaFunil';
+import { pessoaDeLead, type PessoaFunil } from '../lib/funis';
+import { leadsParaContatos } from '../lib/contatos';
 
 const vazio = { nome: '', email: '', whatsapp: '', empresa: '', cnpj: '', cargo: '', colaboradores: '', origem: 'indicacao', evento: '', mensagem: '', aceita_marketing: false };
 
@@ -24,11 +26,11 @@ export default function Leads() {
   const [dono, setDono] = useState('');
   const [ordem, setOrdem] = useState<'recentes' | 'nota'>('recentes');
   const [novo, setNovo] = useState(vazio);
-  const [importar, setImportar] = useState(false);
-  const [csv, setCsv] = useState('');
   const [marcados, setMarcados] = useState<Set<string>>(new Set());
   const [confirmarExclusao, setConfirmarExclusao] = useState(false);
   const [disparo, setDisparo] = useState<Lead[] | null>(null);
+  const [paraFunil, setParaFunil] = useState<PessoaFunil[] | null>(null);
+  const [confirmarContatos, setConfirmarContatos] = useState(false);
 
   const carregar = useCallback(async () => {
     let q = supabase.from('v_leads').select('*').order('criado_em', { ascending: false }).limit(1000);
@@ -66,47 +68,6 @@ export default function Leads() {
     ir(`/leads/${r!.id}`);
   }, 'Lead criado');
 
-  // importação de lista (evento, feira): lê os títulos da planilha; sem títulos, usa nome;email;whatsapp;empresa;cargo;colaboradores
-  const leitura = useMemo(() => lerLista(csv), [csv]);
-  const [importados, setImportados] = useState('');
-  const importarCsv = () => executar(async () => {
-    if (!leitura.linhas.length) throw new Error('Nenhuma linha válida para importar');
-    // não duplica quem já está no CRM com o mesmo e-mail
-    const emails = [...new Set(leitura.linhas.map((l) => l.email).filter(Boolean))] as string[];
-    const existentes = new Set<string>();
-    for (let i = 0; i < emails.length; i += 200) {
-      const r = ok(await supabase.from('leads').select('email').in('email', emails.slice(i, i + 200)));
-      (r ?? []).forEach((x: { email: string | null }) => x.email && existentes.add(x.email.toLowerCase()));
-    }
-    const vistos = new Set<string>();
-    const novos = leitura.linhas.filter((l) => {
-      if (!l.email) return true;
-      if (existentes.has(l.email) || vistos.has(l.email)) return false;
-      vistos.add(l.email); return true;
-    });
-    const linhas = novos.map((l) => ({ ...l, origem: novo.origem || 'evento', evento: novo.evento || null, dono: perfil?.id,
-      nota_perfil: notaPerfil({ colaboradores: l.colaboradores, cargo: l.cargo ?? undefined, temWhatsapp: !!l.whatsapp }) }));
-    const criados: Lead[] = [];
-    for (let i = 0; i < linhas.length; i += 200) {
-      criados.push(...((ok(await supabase.from('leads').insert(linhas.slice(i, i + 200)).select('*')) ?? []) as Lead[]));
-    }
-    // quem tem e-mail corporativo de uma empresa que já está no CRM entra como contato dela
-    const porDominio = new Map<string, ContaResumo | null>();
-    let vinculados = 0;
-    for (const l of criados) {
-      const d = dominioDoEmail(l.email);
-      if (!d) continue;
-      if (!porDominio.has(d)) { const cs = await contasPorDominio(supabase, d); porDominio.set(d, cs.length === 1 ? cs[0] : null); }
-      const conta = porDominio.get(d);
-      if (!conta) continue;
-      try { await vincularLeadAConta(supabase, l, conta, { autor: perfil?.id, motivo: `mesmo domínio @${d} (importação)`, moverContato: false }); vinculados++; } catch { /* segue a importação */ }
-    }
-    const rep = leitura.linhas.length - novos.length;
-    setImportados(`${novos.length} lead(s) importado(s)${rep ? `, ${rep} já estavam no CRM` : ''}${vinculados ? `, ${vinculados} vinculado(s) a empresas pelo domínio do e-mail` : ''}`);
-    setImportar(false); setCsv('');
-    await carregar();
-  }, 'Importação concluída');
-
   // seleção em massa e exclusão
   const suspeitos = useMemo(() => (leads ?? []).filter((l) => nomeSuspeito(l.nome)), [leads]);
   const alternar = (id: string) => setMarcados((m) => { const n = new Set(m); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -118,13 +79,20 @@ export default function Leads() {
     setMarcados(new Set()); setConfirmarExclusao(false);
     await carregar();
   }, `${marcados.size} lead(s) excluído(s)`);
+  const [importados, setImportados] = useState('');
+  const virarContatos = () => executar(async () => {
+    const r = await leadsParaContatos((leads ?? []).filter((l) => marcados.has(l.id)), perfil?.id ?? null);
+    setImportados(`${r.convertidos} lead(s) transformado(s) em contato(s)${r.pulados ? `; ${r.pulados} já tinham negócio no funil e ficaram como estão` : ''}`);
+    setMarcados(new Set()); setConfirmarContatos(false);
+    await carregar();
+  });
 
   return (
     <>
       <div className="topo">
-        <div><h1>Leads</h1><p>Toda entrada nova: site, eventos, indicações e listas.</p></div>
+        <div><h1>Leads</h1><p>Quem converteu (site, formulários, anúncios) ou foi cadastrado como lead. Listas de prospecção entram em <Link to="/contatos">Contatos</Link>.</p></div>
         <div className="acoes">
-          <button className="btn" onClick={() => setImportar(true)}>Importar lista</button>
+          <Link className="btn" to="/contatos?importar=1">Importar lista (contatos)</Link>
           <button className="btn primario" onClick={() => { params.set('novo', '1'); setParams(params); }}>Novo lead</button>
         </div>
       </div>
@@ -163,10 +131,12 @@ export default function Leads() {
 
       {marcados.size > 0 && (
         <div className="aviso info" style={{ marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span style={{ flex: '1 1 240px' }}><b>{marcados.size}</b> lead(s) selecionado(s){confirmarExclusao ? '. A exclusão apaga também o histórico desses leads e não dá para desfazer.' : ''}</span>
-          {confirmarExclusao
+          <span style={{ flex: '1 1 240px' }}><b>{marcados.size}</b> lead(s) selecionado(s){confirmarExclusao ? '. A exclusão apaga também o histórico desses leads e não dá para desfazer.' : confirmarContatos ? '. Eles viram contatos das suas empresas e saem da lista de leads (o histórico continua).' : ''}</span>
+          {confirmarContatos
+            ? <><button className="btn pequeno" onClick={() => setConfirmarContatos(false)}>Cancelar</button><button className="btn pequeno primario" disabled={ocupado} onClick={virarContatos}>Transformar {marcados.size} em contatos</button></>
+            : confirmarExclusao
             ? <><button className="btn pequeno" onClick={() => setConfirmarExclusao(false)}>Cancelar</button><button className="btn pequeno perigo" disabled={ocupado} onClick={excluir}>Excluir {marcados.size} de vez</button></>
-            : <><button className="btn pequeno" onClick={() => setMarcados(new Set())}>Limpar seleção</button><button className="btn pequeno primario" onClick={() => setDisparo((leads ?? []).filter((l) => marcados.has(l.id)))}>Enviar e-mail para {marcados.size}</button><button className="btn pequeno perigo" onClick={() => setConfirmarExclusao(true)}>Excluir selecionados</button></>}
+            : <><button className="btn pequeno" onClick={() => setMarcados(new Set())}>Limpar seleção</button><button className="btn pequeno primario" onClick={() => setParaFunil((leads ?? []).filter((l) => marcados.has(l.id)).map((l) => pessoaDeLead(l)))}>Colocar num funil</button><button className="btn pequeno" onClick={() => setDisparo((leads ?? []).filter((l) => marcados.has(l.id)))}>Enviar e-mail para {marcados.size}</button><button className="btn pequeno" onClick={() => setConfirmarContatos(true)}>Transformar em contatos</button><button className="btn pequeno perigo" onClick={() => setConfirmarExclusao(true)}>Excluir selecionados</button></>}
         </div>
       )}
 
@@ -193,6 +163,7 @@ export default function Leads() {
         </div>
       )}
 
+      <MoverParaFunil pessoas={paraFunil} fechar={() => setParaFunil(null)} concluido={() => { setMarcados(new Set()); carregar(); }} />
       {disparo && <DisparoEmail leads={disparo} fechar={() => setDisparo(null)} enviado={() => { setMarcados(new Set()); carregar(); }} />}
 
       <Modal titulo="Novo lead" aberto={params.get('novo') === '1'} fechar={fecharNovo} largura={640}
@@ -213,7 +184,7 @@ export default function Leads() {
         <div className="linha-campos">
           <Campo rotulo="Origem">
             <select value={novo.origem} onChange={(e) => setNovo({ ...novo, origem: e.target.value })}>
-              {['indicacao', 'evento', 'linkedin', 'whatsapp', 'prospeccao', 'parceiro', 'site', 'outro'].map((o) => <option key={o} value={o}>{nomeOrigem(o)}</option>)}
+              {['indicacao', 'anuncios', 'site', 'evento', 'linkedin', 'whatsapp', 'parceiro', 'outro'].map((o) => <option key={o} value={o}>{nomeOrigem(o)}</option>)}
             </select>
           </Campo>
           <Campo rotulo="Evento ou campanha"><input value={novo.evento} onChange={(e) => setNovo({ ...novo, evento: e.target.value })} /></Campo>
@@ -225,42 +196,6 @@ export default function Leads() {
         </label>
       </Modal>
 
-      <Modal titulo="Importar lista de leads" aberto={importar} fechar={() => setImportar(false)} largura={700}
-        rodape={<><button className="btn" onClick={() => setImportar(false)}>Cancelar</button><button className="btn primario" disabled={ocupado || !leitura.linhas.length} onClick={importarCsv}>Importar {leitura.linhas.length || ''}</button></>}>
-        <div className="aviso info">Cole a planilha <b>com a linha de títulos</b> (Nome, E-mail, Celular ou WhatsApp, Empresa, Cargo, Colaboradores): as colunas são achadas pelo título, em qualquer ordem, e as outras são ignoradas. Sem títulos, a ordem é <b>nome; e-mail; WhatsApp; empresa; cargo; colaboradores</b>. Quem já está no CRM com o mesmo e-mail não é duplicado. Só importe quem deu o contato para falar sobre o Lumi.</div>
-        <div className="linha-campos">
-          <Campo rotulo="Origem">
-            <select value={novo.origem} onChange={(e) => setNovo({ ...novo, origem: e.target.value })}>
-              {['evento', 'indicacao', 'parceiro', 'linkedin', 'outro'].map((o) => <option key={o} value={o}>{nomeOrigem(o)}</option>)}
-            </select>
-          </Campo>
-          <Campo rotulo="Evento ou campanha"><input value={novo.evento} onChange={(e) => setNovo({ ...novo, evento: e.target.value })} placeholder="Ex.: Café NR-1 Curitiba" /></Campo>
-        </div>
-        <Campo rotulo="Linhas"><textarea value={csv} onChange={(e) => setCsv(e.target.value)} style={{ minHeight: 160, fontFamily: 'monospace', fontSize: 12 }} /></Campo>
-        {csv.trim() && (
-          <div style={{ display: 'grid', gap: 10, marginTop: 4 }}>
-            <div className="muted" style={{ fontSize: 13 }}>
-              {leitura.porTitulo
-                ? <>Colunas encontradas: {leitura.colunas.map((c) => `${c.titulo} → ${({ nome: 'nome', email: 'e-mail', whatsapp: 'WhatsApp', empresa: 'empresa', cargo: 'cargo', colaboradores: 'colaboradores' })[c.campo]}`).join(' · ')}</>
-                : <>Sem linha de títulos: lendo na ordem nome; e-mail; WhatsApp; empresa; cargo; colaboradores.</>}
-              {' '}<b>{leitura.linhas.length}</b> pronta(s) para importar{leitura.puladas.length ? `, ${leitura.puladas.length} pulada(s)` : ''}.
-            </div>
-            {leitura.linhas.length > 0 && (
-              <div className="tabela-envolve">
-                <table className="tabela">
-                  <thead><tr><th>Nome</th><th>E-mail</th><th>WhatsApp</th><th>Empresa</th><th>Cargo</th></tr></thead>
-                  <tbody>{leitura.linhas.slice(0, 4).map((l, i) => <tr key={i}><td>{l.nome}</td><td>{l.email ?? '—'}</td><td>{l.whatsapp ?? '—'}</td><td>{l.empresa ?? '—'}</td><td>{l.cargo ?? '—'}</td></tr>)}</tbody>
-                </table>
-              </div>
-            )}
-            {leitura.puladas.length > 0 && (
-              <div className="aviso erro" style={{ fontSize: 13 }}>
-                Linhas puladas: {leitura.puladas.slice(0, 4).map((p) => `linha ${p.linha} (${p.motivo})`).join('; ')}{leitura.puladas.length > 4 ? ` e mais ${leitura.puladas.length - 4}` : ''}.
-              </div>
-            )}
-          </div>
-        )}
-      </Modal>
     </>
   );
 }

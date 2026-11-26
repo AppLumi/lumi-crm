@@ -477,3 +477,7 @@ textarea { min-height: 110px; resize: vertical; }
   .publica .folha { box-shadow: none; border: 0; }
   .cartao, .tabela-envolve { box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; background: #fff; }
 }
+
+/* conteúdo largo dentro dos cartões (tabelas, botões) não invade a coluna ao lado */
+.detalhe > div { min-width: 0; }
+.detalhe .cartao { overflow-x: auto; }

@@ -3,7 +3,9 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ok, supabase } from '../lib/supabase';
 import { useAcao, useSessao } from '../lib/sessao';
 import { STATUS_LEAD, nomeOrigem, cnpjFmt, dataHora, horasUteis, num, relativo, zapLink } from '../lib/formato';
-import type { Lead, Plano } from '../lib/tipos';
+import type { Lead } from '../lib/tipos';
+import { VENDAS, colocarNoFunil, pessoaDeLead } from '../lib/funis';
+import { cnpjValido } from '../../shared/pontuacao';
 import { Campo, Carregando, Modal, Nota, Selo } from '../components/ui';
 import LinhaDoTempo from '../components/LinhaDoTempo';
 import EnviarEmail, { type DestinoEmail } from '../components/EnviarEmail';
@@ -28,7 +30,7 @@ export default function LeadDetalhe() {
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [email, setEmail] = useState<DestinoEmail | null>(null);
   const [qualificar, setQualificar] = useState(false);
-  const [plano, setPlano] = useState<Plano>('premium');
+  const [editar, setEditar] = useState<Record<string, string | boolean> | null>(null);
   const [descartar, setDescartar] = useState(false);
   const [motivo, setMotivo] = useState('');
   const [tick, setTick] = useState(0);
@@ -72,7 +74,7 @@ export default function LeadDetalhe() {
   }, msg);
 
   const vincular = (c: ContaResumo, motivo: string) => executar(async () => {
-    await vincularLeadAConta(supabase, lead, c, { autor: perfil?.id, motivo, moverContato: true });
+    await vincularLeadAConta(supabase, lead, c, { autor: perfil?.id, motivo, moverContato: true, converter: true });
     setEscolher(false);
     await carregar();
   }, `Vinculado(a) à empresa ${c.nome}`);
@@ -85,24 +87,32 @@ export default function LeadDetalhe() {
   }, 'Vínculo desfeito');
 
   const fazerQualificacao = () => executar(async () => {
-    if (!lead.conta_id) {
-      const op = ok(await supabase.rpc('qualificar_lead', { p_lead: lead.id, p_plano: plano })) as string;
-      ir(`/oportunidades/${op}`);
-      return;
-    }
-    // já vinculado a uma empresa: a oportunidade nasce nela, sem criar outra conta
-    let contatoId = lead.contato_id;
-    if (!contatoId && conta) contatoId = (await vincularLeadAConta(supabase, lead, conta, { autor: perfil?.id, motivo: 'qualificação', moverContato: false })).contatoId;
-    const op = ok(await supabase.from('oportunidades').insert({
-      conta_id: lead.conta_id, titulo: `Lumi · ${conta?.nome ?? lead.empresa ?? lead.nome}`, plano, vidas: lead.colaboradores, dono: lead.dono ?? perfil?.id,
-    }).select('id').single())!;
-    await supabase.from('contas').update({ estagio: 'oportunidade' }).eq('id', lead.conta_id).eq('estagio', 'lead');
-    ok(await supabase.from('leads').update({ status: 'qualificado', contato_id: contatoId, oportunidade_id: op.id,
-      primeiro_contato_em: lead.primeiro_contato_em ?? new Date().toISOString() }).eq('id', lead.id));
-    await supabase.from('atividades').update({ conta_id: lead.conta_id, oportunidade_id: op.id }).eq('lead_id', lead.id);
-    await supabase.from('atividades').insert({ tipo: 'sistema', titulo: 'Lead qualificado e oportunidade criada', conta_id: lead.conta_id, lead_id: lead.id, oportunidade_id: op.id, autor: perfil?.id });
-    ir(`/oportunidades/${op.id}`);
-  }, 'Oportunidade criada');
+    const r = await colocarNoFunil({ id: VENDAS, nome: 'Vendas Lumi' }, pessoaDeLead(lead), perfil?.id ?? null);
+    if (r.link) ir(r.link);
+    if (!r.ok) throw new Error(r.motivo);
+  }, 'Negócio aberto no funil de vendas');
+
+  const abrirEdicao = () => setEditar({
+    nome: lead.nome, email: lead.email ?? '', whatsapp: lead.whatsapp ?? '', empresa: lead.empresa ?? '', cnpj: lead.cnpj ?? '',
+    cargo: lead.cargo ?? '', colaboradores: lead.colaboradores ? String(lead.colaboradores) : '', origem: lead.origem, evento: lead.evento ?? '',
+    mensagem: lead.mensagem ?? '', aceita_marketing: lead.aceita_marketing,
+  });
+  const salvarEdicao = () => executar(async () => {
+    if (!editar) return;
+    const t = (k: string) => String(editar[k] ?? '').trim();
+    if (!t('nome')) throw new Error('Informe o nome');
+    const cnpj = t('cnpj').replace(/\D/g, '');
+    if (cnpj && !cnpjValido(cnpj)) throw new Error('CNPJ inválido');
+    const marketing = !!editar.aceita_marketing;
+    ok(await supabase.from('leads').update({
+      nome: t('nome'), email: t('email').toLowerCase() || null, whatsapp: t('whatsapp').replace(/\D/g, '') || null, empresa: t('empresa') || null,
+      cnpj: cnpj || null, cargo: t('cargo') || null, colaboradores: Number(t('colaboradores').replace(/\D/g, '')) || null,
+      origem: t('origem') || 'outro', evento: t('evento') || null, mensagem: t('mensagem') || null, aceita_marketing: marketing,
+      ...(marketing && !lead.aceita_marketing ? { consentimento_em: new Date().toISOString() } : {}),
+    }).eq('id', lead.id));
+    setEditar(null);
+    await carregar();
+  }, 'Dados do lead salvos');
 
   const fazerDescarte = () => executar(async () => {
     if (!motivo.trim()) throw new Error('Diga o motivo, ajuda a melhorar a captação');
@@ -131,7 +141,7 @@ export default function LeadDetalhe() {
             : <>
                 {lead.status !== 'descartado' && <button className="btn" onClick={() => setDescartar(true)}>Descartar</button>}
                 {lead.status !== 'nutricao' && lead.status !== 'descartado' && <button className="btn" onClick={() => atualizar({ status: 'nutricao' }, 'Lead em nutrição')}>Nutrir</button>}
-                <button className="btn primario" onClick={() => setQualificar(true)}>Qualificar</button>
+                <button className="btn primario" onClick={() => setQualificar(true)}>Levar para o funil de vendas</button>
               </>}
         </div>
       </div>
@@ -142,6 +152,7 @@ export default function LeadDetalhe() {
         </div>
       )}
       {lead.status === 'descartado' && lead.motivo_descarte && <div className="aviso">Descartado: {lead.motivo_descarte}</div>}
+      {lead.status === 'convertido' && <div className="aviso info">Esta pessoa foi mesclada{conta ? <> e agora é contato da <Link to={`/contas/${conta.id}`}>{conta.nome}</Link></> : ''}. Ela não aparece mais na lista de leads.</div>}
 
       <div className="detalhe">
         <LinhaDoTempo alvo={{ lead_id: lead.id, conta_id: lead.conta_id ?? undefined, oportunidade_id: lead.oportunidade_id ?? undefined }}
@@ -179,7 +190,10 @@ export default function LeadDetalhe() {
           </div>
 
           <div className="cartao">
-            <h2>Dados</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <h2>Dados</h2>
+              <button className="btn pequeno" onClick={abrirEdicao}>Editar</button>
+            </div>
             <dl className="dados" style={{ marginTop: 10 }}>
               <dt>E-mail</dt><dd>{lead.email ?? '—'}</dd>
               <dt>WhatsApp</dt><dd>{lead.whatsapp ?? '—'}</dd>
@@ -232,21 +246,16 @@ export default function LeadDetalhe() {
         </div>
       </div>
 
-      <Modal titulo="Qualificar lead" aberto={qualificar} fechar={() => setQualificar(false)}
-        rodape={<><button className="btn" onClick={() => setQualificar(false)}>Cancelar</button><button className="btn primario" disabled={ocupado} onClick={fazerQualificacao}>Criar oportunidade</button></>}>
+      <Modal titulo="Levar para o funil de vendas" aberto={qualificar} fechar={() => setQualificar(false)}
+        rodape={<><button className="btn" onClick={() => setQualificar(false)}>Cancelar</button><button className="btn primario" disabled={ocupado} onClick={fazerQualificacao}>Levar para o funil de vendas</button></>}>
         {conta
-          ? <p>A oportunidade será criada na empresa <b>{conta.nome}</b>, à qual este lead já está vinculado.</p>
-          : <p>Qualificar cria a conta da empresa (ou usa a que já existe pelo CNPJ), o contato e uma oportunidade no funil.</p>}
+          ? <p>O negócio será aberto na empresa <b>{conta.nome}</b>, à qual esta pessoa já está vinculada.</p>
+          : <p>Cria a empresa (ou usa a que já existe pelo CNPJ), o contato e o negócio na primeira etapa do funil de vendas. O plano e o valor entram depois, na proposta.</p>}
         {!conta && sugestoes.length > 0 && (
           <div className="aviso erro">Esta pessoa parece ser da <b>{sugestoes[0].conta.nome}</b> ({sugestoes[0].motivo}). Vincule antes de qualificar para não criar a empresa em dobro: <button className="btn-texto em-linha" disabled={ocupado} onClick={() => vincular(sugestoes[0].conta, sugestoes[0].motivo)}>vincular agora</button>.</div>
         )}
         <div className="aviso info">Antes de qualificar, confirme que existe uma dor ligada à NR-1 ou à saúde emocional do time e que a empresa tem porte para o Lumi.</div>
-        <Campo rotulo="Plano de interesse">
-          <select value={plano} onChange={(e) => setPlano(e.target.value as Plano)}>
-            <option value="premium">Premium</option>
-            <option value="starter">Starter</option>
-          </select>
-        </Campo>
+
       </Modal>
 
       <Modal titulo="Descartar lead" aberto={descartar} fechar={() => setDescartar(false)}
@@ -259,6 +268,34 @@ export default function LeadDetalhe() {
         </Campo>
       </Modal>
 
+      <Modal titulo="Editar dados do lead" aberto={!!editar} fechar={() => setEditar(null)} largura={640}
+        rodape={<><button className="btn" onClick={() => setEditar(null)}>Cancelar</button><button className="btn primario" disabled={ocupado} onClick={salvarEdicao}>Salvar</button></>}>
+        {editar && (() => {
+          const campo = (k: string, rotulo: string, extra?: { tipo?: string; num?: boolean }) => (
+            <Campo rotulo={rotulo}><input type={extra?.tipo ?? 'text'} inputMode={extra?.num ? 'numeric' : undefined} value={String(editar[k] ?? '')} onChange={(e) => setEditar({ ...editar, [k]: e.target.value })} /></Campo>
+          );
+          return (
+            <>
+              <div className="linha-campos">{campo('nome', 'Nome')}{campo('cargo', 'Cargo')}</div>
+              <div className="linha-campos">{campo('email', 'E-mail', { tipo: 'email' })}{campo('whatsapp', 'WhatsApp')}</div>
+              <div className="linha-campos">{campo('empresa', 'Empresa')}{campo('cnpj', 'CNPJ')}{campo('colaboradores', 'Colaboradores', { num: true })}</div>
+              <div className="linha-campos">
+                <Campo rotulo="Origem">
+                  <select value={String(editar.origem)} onChange={(e) => setEditar({ ...editar, origem: e.target.value })}>
+                    {['site', 'anuncios', 'indicacao', 'evento', 'linkedin', 'whatsapp', 'prospeccao', 'parceiro', 'manual', 'outro'].map((o) => <option key={o} value={o}>{nomeOrigem(o)}</option>)}
+                  </select>
+                </Campo>
+                {campo('evento', 'Evento ou campanha')}
+              </div>
+              <Campo rotulo="Mensagem / contexto"><textarea value={String(editar.mensagem ?? '')} onChange={(e) => setEditar({ ...editar, mensagem: e.target.value })} /></Campo>
+              <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input type="checkbox" style={{ width: 'auto' }} checked={!!editar.aceita_marketing} onChange={(e) => setEditar({ ...editar, aceita_marketing: e.target.checked })} />
+                A pessoa autorizou receber conteúdos do Lumi
+              </label>
+            </>
+          );
+        })()}
+      </Modal>
       <EnviarEmail destino={email} fechar={() => setEmail(null)} enviado={() => setTick((t) => t + 1)} />
       <EscolherConta titulo={`Empresa de ${lead.nome}`} aberto={escolher} fechar={() => setEscolher(false)} escolher={vincular}
         sugestoes={sugestoes} excluir={conta?.id} ocupado={ocupado}

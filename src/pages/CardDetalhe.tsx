@@ -10,6 +10,7 @@ import EnviarEmail, { type DestinoEmail } from '../components/EnviarEmail';
 import CamposFunil from '../components/CamposFunil';
 import EscolherConta, { type Sugestao } from '../components/EscolherConta';
 import { validarDados } from '../../shared/funis';
+import { VENDAS, colocarNoFunil, funisDisponiveis, pessoaDeContato, pessoaDeLead, type DestinoFunil } from '../lib/funis';
 import { contasPorDominio, dominioDoEmail, type ContaResumo } from '../../shared/empresas';
 
 export default function CardDetalhe() {
@@ -27,6 +28,7 @@ export default function CardDetalhe() {
   const [excluir, setExcluir] = useState(false);
   const [tick, setTick] = useState(0);
   const [faltou, setFaltou] = useState(false);
+  const [destinos, setDestinos] = useState<DestinoFunil[] | null>(null);
 
   const carregar = useCallback(async () => {
     const c = await supabase.from('v_funil_cards').select('*').eq('id', id!).maybeSingle();
@@ -83,6 +85,42 @@ export default function CardDetalhe() {
     await carregar(); setTick((t) => t + 1);
   }, c ? `Vinculado à ${c.nome}` : 'Vínculo desfeito');
 
+  const abrirMover = async () => setDestinos((await funisDisponiveis()).filter((f) => f.id !== card.funil_id));
+  /** Leva esta pessoa para outro funil: num funil próprio o card muda de quadro; no de vendas vira negócio e o card sai daqui. */
+  const moverPara = (f: DestinoFunil) => executar(async () => {
+    if (f.id !== VENDAS) {
+      const { data: et } = await supabase.from('funil_etapas').select('id').eq('funil_id', f.id).eq('tipo', 'aberta').order('ordem').limit(1);
+      if (!et?.length) throw new Error(`O funil ${f.nome} não tem etapa em andamento`);
+      ok(await supabase.from('funil_cards').update({ funil_id: f.id, etapa_id: et[0].id, ...(f.dono_padrao && !card.dono ? { dono: f.dono_padrao } : {}) }).eq('id', card.id));
+      await registrar(`Movido do funil ${funil.nome} para ${f.nome}`);
+      setDestinos(null);
+      ir(`/cards/${card.id}`); await carregar(); setTick((t) => t + 1);
+      return;
+    }
+    let link: string | null = null;
+    if (card.lead_id) {
+      const { data: l } = await supabase.from('leads').select('*').eq('id', card.lead_id).single();
+      const r = await colocarNoFunil(f, pessoaDeLead(l as Parameters<typeof pessoaDeLead>[0]), perfil?.id ?? null);
+      if (!r.ok && !r.link) throw new Error(r.motivo);
+      link = r.ok ? r.link : r.link!;
+    } else if (card.contato_id) {
+      const { data: c } = await supabase.from('contatos').select('*').eq('id', card.contato_id).single();
+      const r = await colocarNoFunil(f, pessoaDeContato({ ...(c as Parameters<typeof pessoaDeContato>[0]), conta_nome: card.conta_nome }), perfil?.id ?? null);
+      if (!r.ok && !r.link) throw new Error(r.motivo);
+      link = r.ok ? r.link : r.link!;
+    } else if (card.conta_id) {
+      const op = ok(await supabase.from('oportunidades').insert({ conta_id: card.conta_id, titulo: `Lumi · ${card.conta_nome ?? card.titulo}`, dono: card.dono ?? perfil?.id }).select('id').single())!;
+      await supabase.from('contas').update({ estagio: 'oportunidade' }).eq('id', card.conta_id).eq('estagio', 'lead');
+      link = `/oportunidades/${op.id}`;
+    } else throw new Error('Vincule o card a uma empresa antes de levar para o funil de vendas');
+    // o histórico do card vai junto para o negócio
+    const opId = link.split('/').pop()!;
+    await supabase.from('atividades').update({ card_id: null, oportunidade_id: opId, conta_id: card.conta_id }).eq('card_id', card.id);
+    await supabase.from('atividades').insert({ tipo: 'sistema', titulo: `Veio do funil ${funil.nome}`, oportunidade_id: opId, conta_id: card.conta_id, lead_id: card.lead_id, autor: perfil?.id });
+    ok(await supabase.from('funil_cards').delete().eq('id', card.id));
+    ir(link);
+  }, `Movido para ${f.nome}`);
+
   const apagar = () => executar(async () => {
     ok(await supabase.from('funil_cards').delete().eq('id', card.id));
     ir(`/funis/${funil.id}`);
@@ -106,6 +144,7 @@ export default function CardDetalhe() {
         <div className="acoes">
           {card.email && <button className="btn" onClick={() => setEmail({ para: card.email!, nome: card.nome ?? card.titulo, empresa: card.conta_nome ?? card.empresa, card_id: card.id, conta_id: card.conta_id ?? undefined, lead_id: card.lead_id ?? undefined })}>Enviar e-mail</button>}
           {zap && <a className="btn" href={zap} target="_blank" rel="noreferrer">WhatsApp</a>}
+          <button className="btn" onClick={abrirMover}>Mover para outro funil</button>
           <select value={card.etapa_id} onChange={(e) => mudarEtapa(e.target.value)} disabled={ocupado} aria-label="Etapa" style={{ width: 'auto' }}>
             {etapas.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}
           </select>
@@ -156,6 +195,12 @@ export default function CardDetalhe() {
 
       <EnviarEmail destino={email} fechar={() => setEmail(null)} enviado={() => setTick((t) => t + 1)} />
       <EscolherConta titulo={`Empresa de ${card.titulo}`} aberto={escolher} fechar={() => setEscolher(false)} escolher={(c, m) => vincularConta(c, m)} sugestoes={sugestoes} ocupado={ocupado} />
+      <Modal titulo={`Mover ${card.nome || card.titulo} para outro funil`} aberto={!!destinos} fechar={() => setDestinos(null)}>
+        <p className="muted">Num funil próprio, o card vai para a primeira etapa com todos os dados. No funil de vendas, vira um negócio na empresa da pessoa e sai deste funil, levando o histórico.</p>
+        <div style={{ display: 'grid', gap: 6 }}>
+          {(destinos ?? []).map((f) => <button key={f.id} className="btn" style={{ justifyContent: 'flex-start' }} disabled={ocupado} onClick={() => moverPara(f)}>{f.nome}</button>)}
+        </div>
+      </Modal>
       <Modal titulo="Excluir card" aberto={excluir} fechar={() => setExcluir(false)}
         rodape={<><button className="btn" onClick={() => setExcluir(false)}>Cancelar</button><button className="btn perigo" disabled={ocupado} onClick={apagar}>Excluir de vez</button></>}>
         <p>O card “{card.titulo}” e o histórico dele neste funil serão apagados. Não dá para desfazer. Para tirar do quadro sem apagar, mova para uma etapa de encerramento.</p>

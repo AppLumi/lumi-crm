@@ -25,6 +25,9 @@ beforeAll(async () => {
   await db.exec(readFileSync(new URL('../supabase/migrations/0002_funis.sql', import.meta.url), 'utf8'));
   // a 0002 pode rodar de novo sem quebrar
   await db.exec(readFileSync(new URL('../supabase/migrations/0002_funis.sql', import.meta.url), 'utf8'));
+  // a 0003 também (status "convertido" e origem/dono dos contatos)
+  await db.exec(readFileSync(new URL('../supabase/migrations/0003_contatos_e_funis.sql', import.meta.url), 'utf8'));
+  await db.exec(readFileSync(new URL('../supabase/migrations/0003_contatos_e_funis.sql', import.meta.url), 'utf8'));
   await db.exec(`
     insert into auth.users values ('${SOCIA}', 'socia@applumi.io'), ('${BRUNA}', 'bruna@applumi.io');
     insert into perfis (id, nome, email, papel, aprova_desconto) values
@@ -34,6 +37,16 @@ beforeAll(async () => {
 });
 
 describe('migração', () => {
+  it('lead mesclado vira contato com origem e sai da lista de abertos', async () => {
+    const { rows } = await db.query<{ id: string }>(`insert into leads (nome, email) values ('Lia Teste', 'lia@exemplo.invalid') returning id`);
+    const c = await db.query<{ id: string }>(`insert into contatos (nome, email, origem, evento, dono) values ('Lia Teste', 'lia@exemplo.invalid', 'prospeccao', 'Lista RS', '${BRUNA}') returning id`);
+    await db.query(`update leads set status = 'convertido', contato_id = $2 where id = $1`, [rows[0].id, c.rows[0].id]);
+    const abertos = await db.query(`select id from leads where status in ('novo', 'em_contato', 'nutricao') and id = $1`, [rows[0].id]);
+    expect(abertos.rows.length).toBe(0);
+    const o = await db.query<{ origem: string }>(`select origem from contatos where id = $1`, [c.rows[0].id]);
+    expect(o.rows[0].origem).toBe('prospeccao');
+  });
+
   it('qualifica lead criando conta, contato e oportunidade', async () => {
     const { rows } = await db.query<{ id: string }>(`insert into leads (nome, email, empresa, cnpj, colaboradores, cargo)
       values ('Ana Souza', 'ana@acme.com.br', 'Acme', '12345678000199', 250, 'Gerente de RH') returning id`);

@@ -7,15 +7,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const quem = await exigirTime(req, res);
   if (!quem) return;
   const b = (req.body ?? {}) as Record<string, unknown>;
-  const para = texto(b.para, 160)?.toLowerCase() ?? null;
+  // um ou vários destinatários (até 10), de dentro ou de fora do CRM
+  const lista = [...new Set(String(texto(b.para, 1600) ?? '').toLowerCase().split(/[\s,;]+/).filter(Boolean))];
   const assunto = texto(b.assunto, 200);
   const corpo = texto(b.corpo, 20000);
-  if (!emailValido(para) || !assunto || !corpo) return res.status(400).json({ erro: 'Preencha destinatário, assunto e mensagem' });
+  if (!lista.length || lista.length > 10 || !lista.every((e) => emailValido(e)) || !assunto || !corpo) return res.status(400).json({ erro: 'Preencha destinatário(s), assunto e mensagem (até 10 e-mails válidos)' });
+  const para = lista.join(', ');
   const db = admin();
 
-  // respeita descadastro
-  const { data: contato } = await db.from('contatos').select('id, descadastrado_em').ilike('email', para).maybeSingle();
-  if (contato?.descadastrado_em) return res.status(409).json({ erro: 'Este contato pediu para não receber e-mails' });
+  // respeita descadastro de cada destinatário
+  let contato: { id: string; descadastrado_em: string | null } | null = null;
+  for (const e of lista) {
+    const { data: c } = await db.from('contatos').select('id, descadastrado_em').ilike('email', e).maybeSingle();
+    if (c?.descadastrado_em) return res.status(409).json({ erro: `${e} pediu para não receber e-mails` });
+    if (!contato && c) contato = c;
+  }
   const leadId = texto(b.lead_id, 40);
   if (leadId) {
     const { data: saiu } = await db.from('eventos').select('id').eq('nome', 'descadastro').eq('lead_id', leadId).limit(1);
@@ -34,7 +40,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const dominio = env('EMAIL_DOMINIO', false) || 'applumi.io';
   const de = `${quem.perfil.nome} · Lumi <comercial@${dominio}>`;
   try {
-    const id = await enviarEmail({ para: [para], assunto, texto: corpo, html: textoParaHtml(corpo), responderPara: quem.perfil.email, de });
+    const id = await enviarEmail({ para: lista, assunto, texto: corpo, html: textoParaHtml(corpo), responderPara: quem.perfil.email, de });
     await db.from('emails').update({ status: 'enviado', resend_id: id, enviado_em: new Date().toISOString() }).eq('id', reg.id);
     const cardId = texto(b.card_id, 40);
     await db.from('atividades').insert({ tipo: 'email', titulo: `E-mail enviado: ${assunto}`, descricao: corpo, autor: quem.perfil.id, ...ref, ...(cardId ? { card_id: cardId } : {}) });

@@ -18,6 +18,7 @@ export const STATUS_LEAD: Record<StatusLead, { nome: string; cor: string }> = {
   qualificado: { nome: 'Qualificado', cor: 'verde' },
   nutricao: { nome: 'Nutrição', cor: '' },
   descartado: { nome: 'Descartado', cor: 'vermelho' },
+  convertido: { nome: 'Virou contato', cor: 'lima' },
 };
 
 export const STATUS_PROPOSTA: Record<StatusProposta, { nome: string; cor: string }> = {
@@ -47,7 +48,7 @@ export const PAPEIS_CONTATO: Record<string, string> = {
 
 const ORIGENS: Record<string, string> = {
   site: 'Site', evento: 'Evento', indicacao: 'Indicação', linkedin: 'LinkedIn', whatsapp: 'WhatsApp', prospeccao: 'Prospecção',
-  parceiro: 'Parceiro', manual: 'Cadastro manual', outro: 'Outro',
+  parceiro: 'Parceiro', manual: 'Cadastro manual', anuncios: 'Anúncios', importacao: 'Importação de lista', lista_fria: 'Lista fria', outro: 'Outro',
 };
 export const nomeOrigem = (o: string | null | undefined) => (o ? ORIGENS[o] ?? o : '—');
 

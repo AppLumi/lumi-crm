@@ -17,11 +17,27 @@ export default function Funil() {
   const [verFechadas, setVerFechadas] = useState(false);
   const [sobre, setSobre] = useState<Etapa | null>(null);
   const [mover, setMover] = useState<{ op: Oportunidade; destino: Etapa } | null>(null);
+  const [pessoas, setPessoas] = useState<Record<string, { nome: string; cargo: string | null }>>({});
 
   const carregar = useCallback(async () => {
     const desde = new Date(Date.now() - 90 * 864e5).toISOString();
     const r = await supabase.from('v_oportunidades').select('*').or(`etapa.not.in.(ganha,perdida),fechada_em.gte."${desde}"`).order('etapa_desde');
-    setOps((r.data ?? []) as Oportunidade[]);
+    const lista = (r.data ?? []) as Oportunidade[];
+    setOps(lista);
+    // nome da pessoa de cada negócio: o decisor; senão, quem entrou como lead; senão, o primeiro contato da empresa
+    const nomes: Record<string, { nome: string; cargo: string | null }> = {};
+    const decisores = [...new Set(lista.map((o) => o.decisor_id).filter(Boolean))] as string[];
+    const [d, l, c] = await Promise.all([
+      decisores.length ? supabase.from('contatos').select('id, nome, cargo').in('id', decisores) : Promise.resolve({ data: [] }),
+      lista.length ? supabase.from('leads').select('oportunidade_id, nome, cargo').in('oportunidade_id', lista.map((o) => o.id)) : Promise.resolve({ data: [] }),
+      lista.length ? supabase.from('contatos').select('conta_id, nome, cargo').in('conta_id', [...new Set(lista.map((o) => o.conta_id))]).order('criado_em') : Promise.resolve({ data: [] }),
+    ]);
+    const porId = new Map(((d.data ?? []) as { id: string; nome: string; cargo: string | null }[]).map((x) => [x.id, x]));
+    const porOp = new Map(((l.data ?? []) as { oportunidade_id: string; nome: string; cargo: string | null }[]).map((x) => [x.oportunidade_id, x]));
+    const porConta = new Map<string, { nome: string; cargo: string | null }>();
+    ((c.data ?? []) as { conta_id: string; nome: string; cargo: string | null }[]).forEach((x) => { if (!porConta.has(x.conta_id)) porConta.set(x.conta_id, x); });
+    lista.forEach((o) => { const p = (o.decisor_id && porId.get(o.decisor_id)) || porOp.get(o.id) || porConta.get(o.conta_id); if (p) nomes[o.id] = { nome: p.nome, cargo: p.cargo }; });
+    setPessoas(nomes);
   }, []);
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -74,10 +90,10 @@ export default function Funil() {
               {fichas.map((o) => (
                 <article key={o.id} className={`ficha ${e.prazo != null && o.dias_na_etapa > e.prazo ? 'parada' : ''}`} draggable
                   onDragStart={(ev) => ev.dataTransfer.setData('text/plain', o.id)} onClick={() => ir(`/oportunidades/${o.id}`)}>
-                  <div className="conta">{o.conta_nome}</div>
-                  <div className="muted" style={{ fontSize: 12 }}>{o.plano === 'premium' ? 'Premium' : 'Starter'}{o.vidas ? ` · ${o.vidas.toLocaleString('pt-BR')} vidas` : ''}</div>
+                  <div className="conta">{pessoas[o.id]?.nome ?? o.conta_nome}</div>
+                  <div className="muted" style={{ fontSize: 12 }}>{pessoas[o.id] ? o.conta_nome : ''}{pessoas[o.id]?.cargo ? ` · ${pessoas[o.id].cargo}` : ''}</div>
                   <div className="meta">
-                    <span>{o.valor_mensal ? `${brl(Number(o.valor_mensal))}/mês` : 'sem valor'}</span>
+                    <span>{o.valor_mensal ? `${brl(Number(o.valor_mensal))}/mês` : ''}</span>
                     <span>{primeiroNome(o.dono_nome) || '—'} · {o.dias_na_etapa}d</span>
                   </div>
                 </article>

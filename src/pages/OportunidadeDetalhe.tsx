@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ok, supabase } from '../lib/supabase';
 import { useAcao, useSessao } from '../lib/sessao';
 import { ETAPAS, MOTIVOS_PERDA, STATUS_PROPOSTA, brl, data, dataHora, linkProposta, nomeEtapa } from '../lib/formato';
 import type { Contato, Etapa, Oportunidade, Proposta } from '../lib/tipos';
-import { Carregando, Selo, Vazio } from '../components/ui';
+import { Carregando, Modal, Selo, Vazio } from '../components/ui';
+import { VENDAS, colocarNoFunil, funisDisponiveis, pessoaDeContato, pessoaDeLead, type DestinoFunil, type PessoaFunil } from '../lib/funis';
 import LinhaDoTempo from '../components/LinhaDoTempo';
 import MudarEtapa, { moverEtapa, pendencias } from '../components/MudarEtapa';
 import GeradorProposta from '../components/GeradorProposta';
@@ -34,6 +35,8 @@ export default function OportunidadeDetalhe() {
   const [editando, setEditando] = useState<string | null>(null);
   const [valor, setValor] = useState('');
   const [tick, setTick] = useState(0);
+  const [destinos, setDestinos] = useState<DestinoFunil[] | null>(null);
+  const ir = useNavigate();
 
   const carregar = useCallback(async () => {
     const o = await supabase.from('v_oportunidades').select('*').eq('id', id!).maybeSingle();
@@ -81,17 +84,32 @@ export default function OportunidadeDetalhe() {
       if (['qualificacao', 'diagnostico', 'demo', 'piloto'].includes(op.etapa)) await supabase.from('oportunidades').update({ etapa: 'proposta' }).eq('id', op.id);
     }
     await navigator.clipboard?.writeText(linkProposta(p.token)).catch(() => undefined);
-    const decisor = contatos.find((c) => c.id === op.decisor_id) ?? contatos.find((c) => c.email);
-    if (decisor?.email) {
-      setEmail({
-        para: decisor.email, nome: decisor.nome, empresa: op.conta_nome, contato_id: decisor.id, conta_id: op.conta_id, oportunidade_id: op.id,
-        extras: { link_proposta: linkProposta(p.token), validade: data(p.validade) },
-      });
-    }
+    const decisor = contatos.find((c) => c.id === op.decisor_id && c.email) ?? contatos.find((c) => c.email);
+    setEmail({
+      para: decisor?.email ?? '', nome: decisor?.nome ?? op.conta_nome, empresa: op.conta_nome, contato_id: decisor?.id, conta_id: op.conta_id, oportunidade_id: op.id,
+      extras: { link_proposta: linkProposta(p.token), validade: data(p.validade) }, sugestoes: contatos.filter((c) => c.email && !c.descadastrado_em).map((c) => ({ email: c.email!, nome: c.nome })),
+    });
     recarregar();
   }, 'Link da proposta copiado');
 
   const decisor = contatos.find((c) => c.id === op.decisor_id);
+
+  const abrirMover = async () => setDestinos((await funisDisponiveis()).filter((f) => f.id !== VENDAS));
+  /** Leva a pessoa deste negócio para um funil próprio; o negócio de vendas é encerrado com o motivo. */
+  const moverPara = (f: DestinoFunil) => executar(async () => {
+    const { data: l } = await supabase.from('leads').select('*').eq('oportunidade_id', op.id).limit(1);
+    const lead = l?.[0] as Parameters<typeof pessoaDeLead>[0] | undefined;
+    const quem = decisor ?? contatos[0];
+    let pessoa: PessoaFunil | null = quem ? { ...pessoaDeContato({ ...quem, conta_nome: op.conta_nome }), lead_id: lead?.id ?? null } : lead ? pessoaDeLead(lead) : null;
+    if (!pessoa) throw new Error('Cadastre um contato na empresa antes de mover');
+    pessoa = { ...pessoa, conta_id: op.conta_id };
+    const r = await colocarNoFunil(f, pessoa, perfil?.id ?? null);
+    if (!r.ok && !r.link) throw new Error(r.motivo);
+    ok(await supabase.from('oportunidades').update({ etapa: 'perdida', motivo_perda: 'outro', motivo_perda_detalhe: `Movida para o funil ${f.nome}` }).eq('id', op.id));
+    await supabase.from('atividades').insert({ tipo: 'sistema', titulo: `Movida para o funil ${f.nome}`, conta_id: op.conta_id, oportunidade_id: op.id, autor: perfil?.id });
+    ir(r.ok ? r.link : r.link!);
+  }, `Movida para ${f.nome}`);
+
   const fechada = op.etapa === 'ganha' || op.etapa === 'perdida';
 
   return (
@@ -101,12 +119,12 @@ export default function OportunidadeDetalhe() {
         <div>
           <h1>{op.titulo}</h1>
           <p>
-            {op.plano === 'premium' ? 'Premium' : 'Starter'}{op.vidas ? ` · ${op.vidas.toLocaleString('pt-BR')} vidas` : ''}
-            {' · '}{op.valor_mensal ? `${brl(Number(op.valor_mensal))}/mês` : 'sem proposta'}
-            {' · '}{op.dias_na_etapa} dia(s) em {nomeEtapa(op.etapa)}
+            {[decisor ? `${decisor.nome}${decisor.cargo ? ` (${decisor.cargo})` : ''}` : null, op.vidas ? `${op.vidas.toLocaleString('pt-BR')} vidas` : null,
+              op.valor_mensal ? `${brl(Number(op.valor_mensal))}/mês` : null, `${op.dias_na_etapa} dia(s) em ${nomeEtapa(op.etapa)}`].filter(Boolean).join(' · ')}
           </p>
         </div>
         <div className="acoes">
+          {!fechada && <button className="btn" onClick={abrirMover}>Mover para outro funil</button>}
           {!fechada && <button className="btn" onClick={() => irPara('perdida')}>Marcar como perdida</button>}
           {!fechada && <button className="btn destaque" onClick={() => irPara('ganha')}>Marcar como ganha</button>}
           {fechada && <button className="btn" onClick={() => atualizar({ etapa: 'negociacao', motivo_perda: null })}>Reabrir</button>}
@@ -218,6 +236,13 @@ export default function OportunidadeDetalhe() {
       <MudarEtapa op={op} destino={mover} fechar={() => setMover(null)} mudou={recarregar} />
       {gerar && <GeradorProposta op={op} versoes={propostas} aberto={gerar} fechar={() => setGerar(false)} criada={recarregar} />}
       <EnviarEmail destino={email} fechar={() => setEmail(null)} enviado={recarregar} />
+      <Modal titulo="Mover para outro funil" aberto={!!destinos} fechar={() => setDestinos(null)}>
+        <p className="muted">A pessoa deste negócio entra na primeira etapa do funil escolhido e o negócio de vendas é encerrado com o motivo “movida para o funil”. Dá para reabrir depois.</p>
+        {destinos && destinos.length === 0 && <p>Nenhum funil próprio criado ainda.</p>}
+        <div style={{ display: 'grid', gap: 6 }}>
+          {(destinos ?? []).map((f) => <button key={f.id} className="btn" style={{ justifyContent: 'flex-start' }} disabled={ocupado} onClick={() => moverPara(f)}>{f.nome}</button>)}
+        </div>
+      </Modal>
     </>
   );
 }

@@ -14,6 +14,7 @@ const Leads = lazy(() => import('./pages/Leads'));
 const LeadDetalhe = lazy(() => import('./pages/LeadDetalhe'));
 const Funil = lazy(() => import('./pages/Funil'));
 const OportunidadeDetalhe = lazy(() => import('./pages/OportunidadeDetalhe'));
+const Contatos = lazy(() => import('./pages/Contatos'));
 const Contas = lazy(() => import('./pages/Contas'));
 const ContaDetalhe = lazy(() => import('./pages/ContaDetalhe'));
 const Tarefas = lazy(() => import('./pages/Tarefas'));
@@ -110,6 +111,7 @@ export default function App() {
                 <Route path="funis/:id" element={<FunilPersonalizado />} />
                 <Route path="cards/:id" element={<CardDetalhe />} />
                 <Route path="oportunidades/:id" element={<OportunidadeDetalhe />} />
+                <Route path="contatos" element={<Contatos />} />
                 <Route path="contas" element={<Contas />} />
                 <Route path="contas/:id" element={<ContaDetalhe />} />
                 <Route path="tarefas" element={<Tarefas />} />

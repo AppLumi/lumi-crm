@@ -1,6 +1,6 @@
 export type Papel = 'socia' | 'negocios' | 'marketing' | 'tecnologia';
 export type EstagioConta = 'lead' | 'oportunidade' | 'cliente' | 'ex_cliente';
-export type StatusLead = 'novo' | 'em_contato' | 'qualificado' | 'nutricao' | 'descartado';
+export type StatusLead = 'novo' | 'em_contato' | 'qualificado' | 'nutricao' | 'descartado' | 'convertido';
 export type Etapa = 'qualificacao' | 'diagnostico' | 'demo' | 'piloto' | 'proposta' | 'negociacao' | 'ganha' | 'perdida';
 export type Plano = 'starter' | 'premium';
 export type StatusProposta = 'rascunho' | 'aguardando_aprovacao' | 'aprovada' | 'enviada' | 'aceita' | 'recusada' | 'expirada';
@@ -18,6 +18,7 @@ export interface Conta {
 export interface Contato {
   id: string; conta_id: string | null; nome: string; cargo: string | null; papel: 'decisor' | 'influenciador' | 'usuario_painel' | 'outro';
   email: string | null; whatsapp: string | null; linkedin: string | null; aceita_marketing: boolean; descadastrado_em: string | null;
+  origem?: string | null; evento?: string | null; dono?: string | null; criado_em?: string;
 }
 
 export interface Lead {
