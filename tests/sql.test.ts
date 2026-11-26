@@ -28,6 +28,8 @@ beforeAll(async () => {
   // a 0003 também (status "convertido" e origem/dono dos contatos)
   await db.exec(readFileSync(new URL('../supabase/migrations/0003_contatos_e_funis.sql', import.meta.url), 'utf8'));
   await db.exec(readFileSync(new URL('../supabase/migrations/0003_contatos_e_funis.sql', import.meta.url), 'utf8'));
+  await db.exec(readFileSync(new URL('../supabase/migrations/0004_integracao_salescoach.sql', import.meta.url), 'utf8'));
+  await db.exec(readFileSync(new URL('../supabase/migrations/0004_integracao_salescoach.sql', import.meta.url), 'utf8'));
   await db.exec(`
     insert into auth.users values ('${SOCIA}', 'socia@applumi.io'), ('${BRUNA}', 'bruna@applumi.io');
     insert into perfis (id, nome, email, papel, aprova_desconto) values

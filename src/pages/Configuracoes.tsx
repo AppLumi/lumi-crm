@@ -3,6 +3,7 @@ import { api, ok, supabase } from '../lib/supabase';
 import { useAcao, useSessao } from '../lib/sessao';
 import type { Papel, Perfil } from '../lib/tipos';
 import { Campo, Modal, Selo } from '../components/ui';
+import IntegracaoSalesCoach from '../components/IntegracaoSalesCoach';
 import { FAIXAS, rotuloFaixa, brl, LIMITE_DESCONTO, LIMITE_DESCONTO_IMPLEMENTACAO, LIMITE_DESCONTO_SEM_APROVACAO } from '../../shared/precos';
 
 const PAPEIS: Record<Papel, string> = { socia: 'Sócia', negocios: 'Negócios', marketing: 'Marketing', tecnologia: 'Tecnologia' };
@@ -123,6 +124,7 @@ export default function Configuracoes() {
           </div>
         </div>
 
+        <IntegracaoSalesCoach />
         <div className="cartao">
           <h2>Captura de leads</h2>
           <p className="muted" style={{ marginTop: 2 }}>Qualquer página (site, landing de evento, QR code) pode mandar leads para cá. Os campos aceitos: nome, email, whatsapp, empresa, cnpj, cargo, colaboradores, mensagem, origem, evento, tipo, aceita_marketing e as UTMs.</p>
