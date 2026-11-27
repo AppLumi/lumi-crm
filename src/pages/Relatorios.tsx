@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { ETAPAS, MOTIVOS_PERDA, brl, horasUteis, nomeOrigem } from '../lib/formato';
 import type { Lead, Oportunidade } from '../lib/tipos';
 import { Barras, Carregando, Kpi } from '../components/ui';
+import RelatoriosAssistente from '../components/RelatoriosAssistente';
 
 const PERIODOS = [{ d: 30, nome: 'Últimos 30 dias' }, { d: 90, nome: 'Últimos 90 dias' }, { d: 365, nome: 'Últimos 12 meses' }];
 
@@ -55,6 +56,7 @@ export default function Relatorios() {
           {PERIODOS.map((p) => <option key={p.d} value={p.d}>{p.nome}</option>)}
         </select>
       </div>
+      <RelatoriosAssistente />
 
       <h2 style={{ margin: '4px 0 10px' }}>Aquisição</h2>
       <div className="grade g4" style={{ marginBottom: 16 }}>

@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useSessao } from '../lib/sessao';
 import Icone, { type NomeIcone } from './Icone';
 import Comando from './Comando';
+import Assistente from './Assistente';
 import Logo from './Logo';
 import { Carregando } from './Splash';
 
@@ -163,6 +164,7 @@ export default function Layout() {
       <main className="conteudo">
         <div className="pagina" key={pathname}><Suspense fallback={<Carregando />}><Outlet /></Suspense></div>
       </main>
+      <Assistente />
 
       <nav className="barra-movel" aria-label="Menu rápido">
         {TODOS.filter((m) => MOVEL.includes(m.para)).map((m) => (
