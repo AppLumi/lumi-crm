@@ -45,6 +45,7 @@ export interface Proposta {
   primeiro_ano: number; piso_aplicado: boolean; validade: string; observacoes: string | null; status: StatusProposta;
   motivo_aprovacao: string | null; aprovado_por: string | null; aprovado_em: string | null; token: string; enviada_em: string | null;
   visualizada_em: string | null; respondida_em: string | null; criado_em: string;
+  slides?: string[] | null; servicos?: unknown; servicos_total?: number | null; // migração 0007
 }
 
 export interface Atividade {

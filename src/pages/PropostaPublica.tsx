@@ -1,15 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { brl, data } from '../lib/formato';
-import Logo from '../components/Logo';
+import ApresentacaoProposta, { type DadosApresentacao } from '../components/ApresentacaoProposta';
+import { lerServicos } from '../../shared/propostaLumi';
 
-interface Publica {
-  versao: number; plano: 'starter' | 'premium'; vidas: number; preco_vida: number; mensal_tabela: number; desconto_pct: number; mensal: number;
-  implementacao_tabela: number; desconto_implementacao_pct: number; implementacao: number; primeiro_ano: number; validade: string;
-  observacoes: string | null; status: string; criado_em: string; empresa: string; responsavel: { nome: string; email: string } | null; vencida: boolean;
-}
+type Publica = DadosApresentacao & { status: string; vencida: boolean };
 
-/** Página que o cliente abre pelo link da proposta. Não exige login. */
+/** Página que o cliente abre pelo link da proposta: a apresentação escolhida, o investimento e o aceite. Não exige login. */
 export default function PropostaPublica() {
   const { token } = useParams<{ token: string }>();
   const [p, setP] = useState<Publica | null>(null);
@@ -20,9 +16,11 @@ export default function PropostaPublica() {
 
   useEffect(() => {
     fetch(`/api/proposta?t=${encodeURIComponent(token ?? '')}`)
-      .then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.erro); setP(j); })
+      .then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.erro); setP({ ...j, servicos: lerServicos(j.servicos), servicos_total: Number(j.servicos_total ?? 0) }); })
       .catch((e: Error) => setErro(e.message || 'Proposta não encontrada'));
   }, [token]);
+
+  useEffect(() => { if (p) document.title = `Proposta Lumi · ${p.empresa}`; }, [p]);
 
   const responder = async (r: 'aceita' | 'recusada') => {
     if (!nome.trim()) { setErro('Escreva seu nome para registrar a resposta'); return; }
@@ -36,57 +34,22 @@ export default function PropostaPublica() {
   };
 
   if (!p) {
-    return <div className="publica"><div className="folha"><div className="corpo">{erro ? <div className="aviso erro">{erro}</div> : 'Carregando…'}</div></div></div>;
+    return <div className="ap-pagina"><div className="ap"><div className="ap-resposta">{erro ? <div className="aviso erro">{erro}</div> : 'Carregando…'}</div></div></div>;
   }
-  const plano = p.plano === 'premium' ? 'Premium' : 'Starter';
   const aberta = p.status === 'enviada' && !p.vencida;
 
   return (
-    <div className="publica">
-      <article className="folha">
-        <header className="cabeca">
-          <Logo altura={34} variante="claro" />
-          <h1 style={{ marginTop: 22, fontSize: 26 }}>Proposta para {p.empresa}</h1>
-          <p style={{ margin: '6px 0 0', color: 'var(--nevoa)' }}>Plano {plano} · versão {p.versao} · emitida em {data(p.criado_em)} · válida até {data(p.validade)}</p>
-        </header>
-        <div className="corpo">
+    <div className="ap-pagina">
+      <ApresentacaoProposta p={p} depois={
+        <>
           {p.status === 'aceita' && <div className="aviso ok">{resposta ? 'Obrigado! Recebemos o seu aceite e vamos entrar em contato com os próximos passos.' : 'Proposta aceita.'}</div>}
           {p.status === 'recusada' && <div className="aviso">{resposta ? 'Resposta registrada. Obrigado pelo retorno.' : 'Proposta recusada.'}</div>}
           {p.vencida && p.status === 'enviada' && <div className="aviso">Esta proposta venceu. Fale com {p.responsavel?.nome ?? 'a gente'} para atualizar os valores.</div>}
-
-          <div className="grade g2" style={{ marginTop: 8 }}>
-            <div>
-              <div className="muted">Mensalidade</div>
-              <div className="preco-grande">{brl(Number(p.mensal))}</div>
-              <div className="muted">{p.vidas.toLocaleString('pt-BR')} colaboradores · {brl(Number(p.preco_vida))} por colaborador/mês</div>
-            </div>
-            <div>
-              <div className="muted">Primeiro ano</div>
-              <div className="preco-grande">{brl(Number(p.primeiro_ano))}</div>
-              <div className="muted">12 mensalidades + implementação</div>
-            </div>
-          </div>
-
-          <table className="tabela" style={{ marginTop: 22 }}>
-            <tbody>
-              <tr><td>Plano {plano}: {p.vidas.toLocaleString('pt-BR')} colaboradores</td><td className="num">{brl(Number(p.mensal_tabela))}/mês</td></tr>
-              {Number(p.desconto_pct) > 0 && <tr><td>Desconto comercial ({p.desconto_pct}%)</td><td className="num">−{brl(Number(p.mensal_tabela) - Number(p.mensal))}/mês</td></tr>}
-              <tr><td><strong>Mensalidade</strong></td><td className="num"><strong>{brl(Number(p.mensal))}/mês</strong></td></tr>
-              <tr><td>Implementação (anual){Number(p.desconto_implementacao_pct) > 0 ? ` · ${p.desconto_implementacao_pct}% de desconto sobre ${brl(Number(p.implementacao_tabela))}` : ''}</td><td className="num">{brl(Number(p.implementacao))}</td></tr>
-            </tbody>
-          </table>
-
-          {p.observacoes && <><h3 style={{ marginTop: 22 }}>Condições</h3><p style={{ whiteSpace: 'pre-wrap' }}>{p.observacoes}</p></>}
-
-          {p.responsavel && (
-            <p className="muted" style={{ marginTop: 22 }}>Dúvidas: {p.responsavel.nome} · <a href={`mailto:${p.responsavel.email}`}>{p.responsavel.email}</a></p>
-          )}
-
           {aberta && (
-            <div className="cartao nao-imprimir" style={{ marginTop: 22, background: '#fafbfd' }}>
+            <div className="ap-resposta nao-imprimir">
               <h3>Responder à proposta</h3>
-              {erro && <div className="aviso erro" style={{ marginTop: 10 }}>{erro}</div>}
-              <div className="campo" style={{ marginTop: 10 }}>
+              {erro && <div className="aviso erro">{erro}</div>}
+              <div className="campo">
                 <label>Seu nome</label>
                 <input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Nome de quem está respondendo" />
               </div>
@@ -94,12 +57,13 @@ export default function PropostaPublica() {
                 <button className="btn" disabled={enviando} onClick={() => responder('recusada')}>Recusar</button>
                 <button className="btn destaque" disabled={enviando} onClick={() => responder('aceita')}>Aceitar proposta</button>
               </div>
-              <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>O aceite registra a sua concordância com os valores. O contrato é enviado em seguida.</p>
+              <p className="muted" style={{ fontSize: 12 }}>O aceite registra a sua concordância com os valores. O contrato é enviado em seguida.</p>
+              {p.responsavel && <p className="muted" style={{ fontSize: 13 }}>Dúvidas: {p.responsavel.nome} · <a href={`mailto:${p.responsavel.email}`}>{p.responsavel.email}</a></p>}
             </div>
           )}
-          <div className="acoes nao-imprimir" style={{ marginTop: 16 }}><button className="btn" onClick={() => window.print()}>Imprimir ou salvar em PDF</button></div>
-        </div>
-      </article>
+          <div className="acoes nao-imprimir"><button className="btn" onClick={() => window.print()}>Imprimir ou salvar em PDF</button></div>
+        </>
+      } />
     </div>
   );
 }

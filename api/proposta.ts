@@ -7,9 +7,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const token = texto(req.method === 'GET' ? req.query.t : (req.body as Record<string, unknown>)?.t, 80);
   if (!token || !/^[a-f0-9]{36}$/.test(token)) return res.status(404).json({ erro: 'Proposta não encontrada' });
   const db = admin();
-  const { data: p } = await db.from('propostas')
-    .select('id, versao, plano, vidas, preco_vida, mensal_tabela, desconto_pct, mensal, implementacao_tabela, desconto_implementacao_pct, implementacao, primeiro_ano, validade, observacoes, status, criado_em, oportunidade_id, oportunidades(conta_id, contas(nome), dono, perfis:dono(nome, email))')
-    .eq('token', token).maybeSingle();
+  const campos = 'id, versao, plano, vidas, preco_vida, mensal_tabela, desconto_pct, mensal, implementacao_tabela, desconto_implementacao_pct, implementacao, primeiro_ano, validade, observacoes, status, criado_em, oportunidade_id, oportunidades(conta_id, contas(nome), dono, perfis:dono(nome, email))';
+  let r = await db.from('propostas').select(`${campos}, slides, servicos, servicos_total`).eq('token', token).maybeSingle();
+  // antes da migração 0007 as colunas da apresentação não existem: a proposta abre sem elas
+  if (r.error?.code === '42703') r = await db.from('propostas').select(campos).eq('token', token).maybeSingle() as typeof r;
+  const p = r.data;
   if (!p || !['enviada', 'aceita', 'recusada', 'expirada'].includes(p.status)) return res.status(404).json({ erro: 'Proposta não encontrada' });
   const op = p.oportunidades as unknown as { conta_id: string; contas: { nome: string }; perfis: { nome: string; email: string } | null };
   const vencida = new Date(p.validade + 'T23:59:59-03:00') < new Date();

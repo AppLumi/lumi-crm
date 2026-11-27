@@ -10,6 +10,9 @@ import LinhaDoTempo from '../components/LinhaDoTempo';
 import MudarEtapa, { moverEtapa, pendencias } from '../components/MudarEtapa';
 import GeradorProposta from '../components/GeradorProposta';
 import EnviarEmail, { type DestinoEmail } from '../components/EnviarEmail';
+import PreviaProposta from '../components/PreviaProposta';
+import type { DadosApresentacao } from '../components/ApresentacaoProposta';
+import { lerServicos } from '../../shared/propostaLumi';
 
 const CAMPOS: { k: keyof Oportunidade; rotulo: string; tipo?: 'data' | 'datahora' }[] = [
   { k: 'dor', rotulo: 'Dor principal' },
@@ -36,6 +39,7 @@ export default function OportunidadeDetalhe() {
   const [valor, setValor] = useState('');
   const [tick, setTick] = useState(0);
   const [destinos, setDestinos] = useState<DestinoFunil[] | null>(null);
+  const [previa, setPrevia] = useState<DadosApresentacao | null>(null);
   const ir = useNavigate();
 
   const carregar = useCallback(async () => {
@@ -77,6 +81,18 @@ export default function OportunidadeDetalhe() {
     await supabase.from('atividades').insert({ tipo: 'sistema', titulo: `Proposta v${p.versao} aprovada por ${perfil?.nome}`, conta_id: op.conta_id, oportunidade_id: op.id, autor: perfil?.id });
     recarregar();
   }, 'Proposta aprovada');
+
+  const verPrevia = (p: Proposta) => {
+    if (!op) return;
+    const dono = time.find((t) => t.id === op.dono);
+    setPrevia({
+      empresa: op.conta_nome, versao: p.versao, plano: p.plano, vidas: p.vidas, preco_vida: p.preco_vida, mensal_tabela: p.mensal_tabela,
+      desconto_pct: p.desconto_pct, mensal: p.mensal, implementacao_tabela: p.implementacao_tabela, desconto_implementacao_pct: p.desconto_implementacao_pct,
+      implementacao: p.implementacao, primeiro_ano: p.primeiro_ano, validade: p.validade, observacoes: p.observacoes, criado_em: p.criado_em,
+      slides: p.slides ?? null, servicos: lerServicos(p.servicos), servicos_total: Number(p.servicos_total ?? 0),
+      responsavel: dono ? { nome: dono.nome, email: dono.email } : null,
+    });
+  };
 
   const enviar = (p: Proposta) => executar(async () => {
     if (p.status === 'aprovada') {
@@ -152,7 +168,7 @@ export default function OportunidadeDetalhe() {
                 <tbody>
                   {propostas.map((p) => (
                     <tr key={p.id}>
-                      <td style={{ whiteSpace: 'nowrap' }}>v{p.versao} · {p.plano === 'premium' ? 'Premium' : 'Starter'}<div className="muted">{p.vidas.toLocaleString('pt-BR')} vidas{p.desconto_pct > 0 ? ` · ${p.desconto_pct}% off` : ''}</div></td>
+                      <td style={{ whiteSpace: 'nowrap' }}>v{p.versao} · {p.plano === 'premium' ? 'Premium' : 'Starter'}<div className="muted">{p.vidas.toLocaleString('pt-BR')} vidas{p.desconto_pct > 0 ? ` · ${p.desconto_pct}% off` : ''}{lerServicos(p.servicos).length > 0 ? ' · + workshop' : ''}</div></td>
                       <td className="num">{brl(Number(p.mensal))}</td>
                       <td className="num">{brl(Number(p.primeiro_ano))}</td>
                       <td>
@@ -163,7 +179,8 @@ export default function OportunidadeDetalhe() {
                       <td className="num" style={{ whiteSpace: 'nowrap' }}>
                         {p.status === 'aguardando_aprovacao' && perfil?.aprova_desconto && <button className="btn pequeno destaque" disabled={ocupado} onClick={() => aprovar(p)}>Aprovar</button>}
                         {(p.status === 'aprovada' || p.status === 'enviada') && <button className="btn pequeno" disabled={ocupado} onClick={() => enviar(p)}>{p.status === 'aprovada' ? 'Enviar' : 'Reenviar'}</button>}
-                        {['aprovada', 'enviada', 'aceita', 'recusada'].includes(p.status) && <a className="btn pequeno" href={`/p/${p.token}`} target="_blank" rel="noreferrer">Ver</a>}
+                        <button className="btn pequeno" onClick={() => verPrevia(p)}>Prévia</button>
+                        {['enviada', 'aceita', 'recusada'].includes(p.status) && <a className="btn pequeno" href={`/p/${p.token}`} target="_blank" rel="noreferrer">Link</a>}
                       </td>
                     </tr>
                   ))}
@@ -234,6 +251,7 @@ export default function OportunidadeDetalhe() {
       </div>
 
       <MudarEtapa op={op} destino={mover} fechar={() => setMover(null)} mudou={recarregar} />
+      <PreviaProposta p={previa} fechar={() => setPrevia(null)} />
       {gerar && <GeradorProposta op={op} versoes={propostas} aberto={gerar} fechar={() => setGerar(false)} criada={recarregar} />}
       <EnviarEmail destino={email} fechar={() => setEmail(null)} enviado={recarregar} />
       <Modal titulo="Mover para outro funil" aberto={!!destinos} fechar={() => setDestinos(null)}>

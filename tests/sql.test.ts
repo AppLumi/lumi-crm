@@ -32,6 +32,9 @@ beforeAll(async () => {
   await db.exec(readFileSync(new URL('../supabase/migrations/0004_integracao_salescoach.sql', import.meta.url), 'utf8'));
   await db.exec(readFileSync(new URL('../supabase/migrations/0005_prospeccao_clientes_grou.sql', import.meta.url), 'utf8'));
   await db.exec(readFileSync(new URL('../supabase/migrations/0005_prospeccao_clientes_grou.sql', import.meta.url), 'utf8'));
+  await db.exec(readFileSync(new URL('../supabase/migrations/0006_assistente.sql', import.meta.url), 'utf8'));
+  await db.exec(readFileSync(new URL('../supabase/migrations/0007_proposta_apresentacao.sql', import.meta.url), 'utf8'));
+  await db.exec(readFileSync(new URL('../supabase/migrations/0007_proposta_apresentacao.sql', import.meta.url), 'utf8'));
   await db.exec(`
     insert into auth.users values ('${SOCIA}', 'socia@applumi.io'), ('${BRUNA}', 'bruna@applumi.io');
     insert into perfis (id, nome, email, papel, aprova_desconto) values
@@ -91,6 +94,21 @@ describe('migração', () => {
     const ok = await db.query<{ aprovado_em: string | null }>(`select aprovado_em from propostas where id = $1`, [pid]);
     expect(ok.rows[0].aprovado_em).not.toBeNull();
     await expect(como(SOCIA, base, [rows[0].id, 3, 25, 'rascunho'])).rejects.toThrow(/20%/);
+  });
+
+  it('proposta guarda slides e serviços (workshop) e recusa lista inválida', async () => {
+    const { rows } = await db.query<{ id: string }>(`select id from oportunidades limit 1`);
+    const ins = `insert into propostas (oportunidade_id, versao, plano, vidas, preco_vida, mensal_tabela, desconto_pct, mensal,
+      implementacao_tabela, implementacao, primeiro_ano, status, slides, servicos, servicos_total)
+      values ($1, $2, 'premium', 250, 21.90, 5475, 0, 5475, 1500, 1500, 67200, 'aprovada', $3, $4::jsonb, $5) returning slides, servicos, servicos_total`;
+    const item = [{ chave: 'workshop_nr1_liderancas', nome: 'Workshop', unidade: 'turmas', quantidade: 2, valor_unitario: 7000, valor_total: 14000, detalhe: null }];
+    const r = await como(BRUNA, ins, [rows[0].id, 10, ['capa', 'ws_abertura', 'investimento'], JSON.stringify(item), 14000]);
+    const x = r.rows[0] as { slides: string[]; servicos: typeof item; servicos_total: string };
+    expect(x.slides).toEqual(['capa', 'ws_abertura', 'investimento']);
+    expect(x.servicos[0].valor_total).toBe(14000);
+    expect(Number(x.servicos_total)).toBe(14000);
+    await expect(como(BRUNA, ins, [rows[0].id, 11, null, '{}', 0])).rejects.toThrow(/propostas_servicos_lista/);
+    await expect(como(BRUNA, ins, [rows[0].id, 12, null, '[]', -1])).rejects.toThrow(/propostas_servicos_total/);
   });
 
   it('funis personalizados: etapa do mesmo funil, relógio da etapa e fechamento', async () => {
