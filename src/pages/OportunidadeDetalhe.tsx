@@ -11,6 +11,7 @@ import MudarEtapa, { moverEtapa, pendencias } from '../components/MudarEtapa';
 import GeradorProposta from '../components/GeradorProposta';
 import EnviarEmail, { type DestinoEmail } from '../components/EnviarEmail';
 import PreviaProposta from '../components/PreviaProposta';
+import SalesCoachCartao from '../components/SalesCoachCartao';
 import type { DadosApresentacao } from '../components/ApresentacaoProposta';
 import { lerServicos } from '../../shared/propostaLumi';
 
@@ -216,6 +217,8 @@ export default function OportunidadeDetalhe() {
               <dt>Primeiro ano</dt><dd>{brl(op.valor_primeiro_ano)}</dd>
             </dl>
           </div>
+
+          <SalesCoachCartao oportunidadeId={op.id} contaId={op.conta_id} />
 
           <div className="cartao">
             <h2>Qualificação</h2>

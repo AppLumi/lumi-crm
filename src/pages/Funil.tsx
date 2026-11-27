@@ -7,6 +7,8 @@ import type { Etapa, Oportunidade } from '../lib/tipos';
 import { Carregando, Kpi } from '../components/ui';
 import MudarEtapa, { moverEtapa, pendencias } from '../components/MudarEtapa';
 import FunisAbas from '../components/FunisAbas';
+import { COR_TEMPERATURA, camposSalesCoach } from '../components/SalesCoachCartao';
+import { temperaturaDe } from '../../shared/salesCoach';
 
 export default function Funil() {
   const ir = useNavigate();
@@ -18,6 +20,7 @@ export default function Funil() {
   const [sobre, setSobre] = useState<Etapa | null>(null);
   const [mover, setMover] = useState<{ op: Oportunidade; destino: Etapa } | null>(null);
   const [pessoas, setPessoas] = useState<Record<string, { nome: string; cargo: string | null }>>({});
+  const [temps, setTemps] = useState<Record<string, ReturnType<typeof temperaturaDe>>>({});
 
   const carregar = useCallback(async () => {
     const desde = new Date(Date.now() - 90 * 864e5).toISOString();
@@ -38,6 +41,13 @@ export default function Funil() {
     ((c.data ?? []) as { conta_id: string; nome: string; cargo: string | null }[]).forEach((x) => { if (!porConta.has(x.conta_id)) porConta.set(x.conta_id, x); });
     lista.forEach((o) => { const p = (o.decisor_id && porId.get(o.decisor_id)) || porOp.get(o.id) || porConta.get(o.conta_id); if (p) nomes[o.id] = { nome: p.nome, cargo: p.cargo }; });
     setPessoas(nomes);
+    // temperatura da última análise do Sales Coach em cada negócio
+    if (lista.length) {
+      const [campos, sc] = await Promise.all([camposSalesCoach(), supabase.from('oportunidades').select('id, sales_coach').in('id', lista.map((o) => o.id))]);
+      const t: Record<string, ReturnType<typeof temperaturaDe>> = {};
+      ((sc.data ?? []) as { id: string; sales_coach: Record<string, unknown> | null }[]).forEach((x) => { t[x.id] = temperaturaDe(x.sales_coach, campos); });
+      setTemps(t);
+    }
   }, []);
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -96,6 +106,7 @@ export default function Funil() {
                     <span>{o.valor_mensal ? `${brl(Number(o.valor_mensal))}/mês` : ''}</span>
                     <span>{primeiroNome(o.dono_nome) || '—'} · {o.dias_na_etapa}d</span>
                   </div>
+                  {temps[o.id] && <div className="sc-temp"><span className={`selo ${temps[o.id]!.nivel ? COR_TEMPERATURA[temps[o.id]!.nivel!] : ''}`}>{temps[o.id]!.rotulo}</span><span className="muted">Sales Coach</span></div>}
                 </article>
               ))}
             </section>

@@ -6,6 +6,7 @@ import { PAPEIS_CONTATO, brl, cnpjFmt, nomeEtapa, num, zapLink } from '../lib/fo
 import type { Conta, Contato, Oportunidade } from '../lib/tipos';
 import { Campo, Carregando, Modal, Selo, Vazio } from '../components/ui';
 import LinhaDoTempo from '../components/LinhaDoTempo';
+import SalesCoachCartao from '../components/SalesCoachCartao';
 import EnviarEmail, { type DestinoEmail } from '../components/EnviarEmail';
 import { ESTAGIOS, type DadosCnpj } from './Contas';
 import EscolherConta, { type Sugestao } from '../components/EscolherConta';
@@ -341,6 +342,8 @@ export default function ContaDetalhe() {
             </dl>
           </div>
           <NosFunis filtro={{ coluna: 'conta_id', valor: conta.id }} base={{ titulo: conta.nome, empresa: conta.nome, conta_id: conta.id }} />
+          <SalesCoachCartao contaId={conta.id} />
+
           <div className="cartao">
             <h2>Notas da conta</h2>
             <textarea style={{ marginTop: 8, minHeight: 120 }} value={notas ?? conta.notas ?? ''} onChange={(e) => setNotas(e.target.value)} placeholder="Contexto que todo o time precisa saber" />

@@ -695,3 +695,21 @@ textarea { min-height: 110px; resize: vertical; }
   .ap-slide { break-inside: avoid; break-after: page; box-shadow: none; }
   .ap-deck, .ap { gap: 0; }
 }
+
+/* ---------- cartão do Sales Coach (negócio e empresa) ---------- */
+.sc-topo { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.sc-principal { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; }
+.sc-nota { display: grid; grid-template-columns: auto auto; align-items: baseline; column-gap: 2px; min-width: 110px; }
+.sc-nota b { font-family: 'Lexend', 'DM Sans', sans-serif; font-size: 30px; font-weight: 600; color: var(--tinta, #101B33); line-height: 1; }
+.sc-nota span { font-size: 13px; color: var(--tinta-3, #68748F); }
+.sc-barra { grid-column: 1 / -1; height: 6px; border-radius: 6px; background: rgba(14, 57, 141, 0.1); margin-top: 6px; overflow: hidden; }
+.sc-barra i { display: block; height: 100%; border-radius: 6px; background: linear-gradient(90deg, #3B72D9, #8EE03F); }
+.sc-proximo { margin-top: 14px; padding: 10px 12px; border-radius: 12px; background: rgba(142, 224, 63, 0.14); border-left: 3px solid #8EE03F; }
+.sc-proximo p, .sc-bloco p { margin: 2px 0 0; font-size: 14px; white-space: pre-wrap; }
+.sc small, .sc-proximo small { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--tinta-3, #68748F); }
+.sc-bloco { margin-top: 12px; }
+.sc-criterios { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
+.sc-criterios li { display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px dashed rgba(14, 57, 141, 0.12); padding-bottom: 4px; }
+.sc-criterios b { white-space: nowrap; }
+.ficha .sc-temp { margin-top: 6px; display: flex; gap: 6px; align-items: center; font-size: 11px; }
+.ficha .sc-temp .selo { padding: 1px 8px; font-size: 11px; }
