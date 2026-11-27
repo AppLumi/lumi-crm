@@ -11,6 +11,8 @@ export interface DestinoEmail {
   extras?: Record<string, string>;
   /** e-mails que dá para acrescentar com um clique (ex.: outros contatos da empresa) */
   sugestoes?: { email: string; nome: string }[];
+  /** texto já pronto (ex.: sugestão de abordagem), que ainda pode ser editado antes de enviar */
+  inicial?: { assunto: string; corpo: string };
 }
 
 const preencher = (t: string, v: Record<string, string>) => t.replace(/\{\{(\w+)\}\}/g, (_, k: string) => v[k] ?? `{{${k}}}`);
@@ -26,7 +28,7 @@ export default function EnviarEmail({ destino, fechar, enviado }: { destino: Des
   useEffect(() => {
     if (!destino) return;
     supabase.from('modelos_email').select('*').eq('ativo', true).order('nome').then(({ data }) => setModelos((data ?? []) as ModeloEmail[]));
-    setAssunto(''); setCorpo(''); setPara(destino.para ?? '');
+    setAssunto(destino.inicial?.assunto ?? ''); setCorpo(destino.inicial?.corpo ?? ''); setPara(destino.para ?? '');
   }, [destino]);
 
   if (!destino) return null;

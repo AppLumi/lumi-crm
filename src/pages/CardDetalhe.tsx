@@ -8,6 +8,7 @@ import { Campo, Carregando, Modal, Selo, Vazio } from '../components/ui';
 import LinhaDoTempo from '../components/LinhaDoTempo';
 import EnviarEmail, { type DestinoEmail } from '../components/EnviarEmail';
 import CamposFunil from '../components/CamposFunil';
+import SugestoesAbordagem from '../components/SugestoesAbordagem';
 import EscolherConta, { type Sugestao } from '../components/EscolherConta';
 import { validarDados } from '../../shared/funis';
 import { VENDAS, colocarNoFunil, funisDisponiveis, pessoaDeContato, pessoaDeLead, type DestinoFunil } from '../lib/funis';
@@ -156,6 +157,12 @@ export default function CardDetalhe() {
         <LinhaDoTempo alvo={{ card_id: card.id, conta_id: card.conta_id ?? undefined, lead_id: card.lead_id ?? undefined }} filtro={{ coluna: 'card_id', valor: card.id }} atualizar={tick} />
 
         <div style={{ display: 'grid', gap: 16 }}>
+          {card.contato_id && card.etapa_tipo === 'aberta' && (
+            <SugestoesAbordagem key={card.id} aoRegistrar={() => setTick((t) => t + 1)} p={{
+              card_id: card.id, contato_id: card.contato_id, nome: card.nome ?? card.titulo, email: card.email, whatsapp: card.whatsapp,
+              empresa: card.conta_nome ?? card.empresa, conta_id: card.conta_id, lead_id: card.lead_id, desde: card.criado_em,
+            }} />
+          )}
           <div className="cartao" style={{ display: 'grid', gap: 2 }}>
             <h2 style={{ marginBottom: 8 }}>Dados</h2>
             <Campo rotulo="Título"><input value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} /></Campo>
