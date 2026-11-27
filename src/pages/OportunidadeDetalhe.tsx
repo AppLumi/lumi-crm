@@ -170,18 +170,18 @@ export default function OportunidadeDetalhe() {
                     <tr key={p.id}>
                       <td style={{ whiteSpace: 'nowrap' }}>v{p.versao} · {p.plano === 'premium' ? 'Premium' : 'Starter'}<div className="muted">{p.vidas.toLocaleString('pt-BR')} vidas{p.desconto_pct > 0 ? ` · ${p.desconto_pct}% off` : ''}{lerServicos(p.servicos).length > 0 ? ' · + workshop' : ''}</div></td>
                       <td className="num">{brl(Number(p.mensal))}</td>
-                      <td className="num">{brl(Number(p.primeiro_ano))}</td>
+                      <td className="num">{brl(Number(p.primeiro_ano) + Number(p.servicos_total ?? 0))}</td>
                       <td>
                         <Selo cor={STATUS_PROPOSTA[p.status].cor}>{STATUS_PROPOSTA[p.status].nome}</Selo>
                         {p.visualizada_em && <div className="muted">vista {dataHora(p.visualizada_em)}</div>}
                         {p.status === 'aguardando_aprovacao' && p.motivo_aprovacao && <div className="muted">“{p.motivo_aprovacao}”</div>}
                       </td>
-                      <td className="num" style={{ whiteSpace: 'nowrap' }}>
+                      <td className="num"><div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'flex-end' }}>
                         {p.status === 'aguardando_aprovacao' && perfil?.aprova_desconto && <button className="btn pequeno destaque" disabled={ocupado} onClick={() => aprovar(p)}>Aprovar</button>}
                         {(p.status === 'aprovada' || p.status === 'enviada') && <button className="btn pequeno" disabled={ocupado} onClick={() => enviar(p)}>{p.status === 'aprovada' ? 'Enviar' : 'Reenviar'}</button>}
                         <button className="btn pequeno" onClick={() => verPrevia(p)}>Prévia</button>
                         {['enviada', 'aceita', 'recusada'].includes(p.status) && <a className="btn pequeno" href={`/p/${p.token}`} target="_blank" rel="noreferrer">Link</a>}
-                      </td>
+                      </div></td>
                     </tr>
                   ))}
                 </tbody>
