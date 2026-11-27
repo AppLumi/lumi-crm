@@ -50,3 +50,13 @@ describe('Sales Coach no CRM', () => {
     expect(nivelTemperatura('Outra')).toBeNull();
   });
 });
+
+describe('prazo da tarefa do Sales Coach', async () => {
+  const { prazo } = await import('../api/integracao.js');
+  it('data sem hora fica no mesmo dia em Brasília', () => {
+    expect(prazo('2026-12-03')).toBe('2026-12-03T21:00:00.000Z');
+    expect(prazo('2026-12-03T10:00:00-03:00')).toBe('2026-12-03T13:00:00.000Z');
+    expect(prazo('lixo')).toBeNull();
+    expect(prazo(null)).toBeNull();
+  });
+});

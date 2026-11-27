@@ -8,6 +8,12 @@ import { Campo, Vazio } from './ui';
 type Alvo = { lead_id?: string; conta_id?: string; oportunidade_id?: string; contato_id?: string; card_id?: string };
 
 /** Linha do tempo de uma entidade + formulário rápido de registro (nota, ligação, reunião, WhatsApp, tarefa). */
+
+/** Texto com os links (http/https) clicáveis, como o "Análise completa" das notas do Sales Coach. */
+function comLinks(t: string) {
+  return t.split(/(https?:\/\/[^\s]+)/g).map((parte, i) => /^https?:\/\//.test(parte)
+    ? <a key={i} href={parte} target="_blank" rel="noreferrer">{parte}</a> : parte);
+}
 export default function LinhaDoTempo({ alvo, filtro, atualizar }: { alvo: Alvo; filtro: { coluna: string; valor: string }; atualizar?: number }) {
   const { perfil, time } = useSessao();
   const { ocupado, executar } = useAcao();
@@ -88,7 +94,7 @@ export default function LinhaDoTempo({ alvo, filtro, atualizar }: { alvo: Alvo; 
                 {a.vence_em && ` · prazo ${dataHora(a.vence_em)}`}
                 {a.responsavel && a.tipo === 'tarefa' && ` · com ${time.find((p) => p.id === a.responsavel)?.nome ?? ''}`}
               </div>
-              {a.descricao && <div className="descricao">{a.descricao}</div>}
+              {a.descricao && <div className="descricao">{comLinks(a.descricao)}</div>}
             </div>
           </li>
         ))}

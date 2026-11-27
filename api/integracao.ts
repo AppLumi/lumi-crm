@@ -108,6 +108,13 @@ async function alvo(db: SupabaseClient, id: string): Promise<{ tipo: 'op' | 'con
 
 const slug = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40) || 'campo';
 
+/** Prazo da tarefa. Data sem hora (AAAA-MM-DD) vira fim do expediente em Brasília, para não cair no dia anterior pelo fuso. */
+export function prazo(venc: string | null | undefined): string | null {
+  if (!venc) return null;
+  const v = /^\d{4}-\d{2}-\d{2}$/.test(venc) ? `${venc}T18:00:00-03:00` : venc;
+  return Number.isNaN(Date.parse(v)) ? null : new Date(v).toISOString();
+}
+
 async function acaoSalesCoach(db: SupabaseClient, b: Json): Promise<Json> {
   const acao = String(b.action ?? '');
   if (acao === 'info') return { conta: 'CRM do Lumi' };
@@ -166,7 +173,7 @@ async function acaoSalesCoach(db: SupabaseClient, b: Json): Promise<Json> {
     const nome = texto(b.nome, 200) ?? 'Próximo passo';
     const venc = texto(b.vencimento, 40);
     const { error } = await db.from('atividades').insert({ tipo: 'tarefa', titulo: nome, descricao: texto(b.descricao, 5000), responsavel: a.dono,
-      vence_em: venc && !Number.isNaN(Date.parse(venc)) ? new Date(venc).toISOString() : null, ...ligacao });
+      vence_em: prazo(venc), ...ligacao });
     if (error) throw new Erro(500, error.message);
     return { ok: true };
   }
