@@ -24,7 +24,7 @@ O site organiza o uso em quatro etapas, "com o nosso time ao lado do RH na impla
 | 3. Agir | O risco vira plano de ação com responsável e prazo | Planos de ação (quadro de tarefas) |
 | 4. Acompanhar | Check-ins diários, pesquisas de clima e pulso e evidências registradas mantêm o ciclo vivo o ano todo | Clima emocional, Pesquisas, Evidências |
 
-Selos do site sob o ciclo: "Anonimato por construção: dados agregados, com amostragem mínima protegida" · "Especialistas credenciados: psicólogos com CRP ativo e coaches certificados" · "Evidência para auditoria: diagnóstico, inventário e planos em um só lugar". Veja a seção 9 antes de usar os dois últimos selos com o cliente: hoje eles têm limites.
+Selos do site sob o ciclo: "Anonimato por construção: dados agregados, com amostragem mínima protegida" · "Especialistas credenciados: psicólogos com CRP ativo e coaches certificados" · "Evidência para auditoria: diagnóstico, planos de ação e registros em um só lugar" (até 27/11/2026 falava em inventário). Veja a seção 9 antes de usar os dois últimos selos com o cliente: hoje eles têm limites.
 
 ## 3. Painel da empresa (RH, SESMT, gestores)
 
@@ -41,7 +41,7 @@ Acesso web (painel.applumi.io). O site descreve quatro módulos.
 - Resultado: score e classificação por domínio e por setor (semáforo, com classificações como "Ação urgente" e "Ação necessária"), radar, leitura por subdomínio, participação por setor, filtros por unidade, equipe e cargo, evolução de até 12 campanhas e relatório gerado por IA.
 - Campanhas por setor, anônimas ou identificadas, com periodicidade automática.
 - Entrega comercial: "base pronta para o inventário de riscos do PGR". O Lumi entrega a parte psicossocial (diagnóstico e evidências); o documento final do PGR e o envio ao eSocial continuam com o SESMT ou a consultoria de SST da empresa.
-- Cuidado de discurso: o HSE é um instrumento validado internacionalmente e é o **núcleo** do diagnóstico do Lumi. Mas a NR-1 **não exige método específico**. Não diga "o HSE é a metodologia que a NR-1 pede" (o site ainda diz isso; o mapeamento interno de 13/11/2026 e o MTE corrigem). Diga: "usamos um instrumento validado internacionalmente, o HSE, como núcleo do diagnóstico".
+- Cuidado de discurso: o HSE é um instrumento validado internacionalmente e é o **núcleo** do diagnóstico do Lumi. Mas a NR-1 **não exige método específico**. Não diga "o HSE é a metodologia que a NR-1 pede" (o site dizia isso até 27/11/2026 e foi corrigido). Diga: "usamos um instrumento validado internacionalmente, o HSE, como núcleo do diagnóstico".
 
 ### 3.3 Pesquisas
 - O RH cria e programa as próprias campanhas: clima, pulso, liderança, "o que for", com modelo pronto ou questionário próprio, anônimo ou identificado.
@@ -269,8 +269,8 @@ Requisito da NR-1 que o Lumi atende por completo hoje: **consulta aos trabalhado
 | ADPF 1316 / Nusol / Sejan | Ação no STF sobre as sanções da NR-1, núcleo de conciliação do STF e câmara da AGU que recebe subsídios: ver nr1.md, seção 9 |
 
 ## Divergências entre fontes (anotadas)
-1. **"HSE é a metodologia que a NR-1 pede"** (site) × "a NR-1 não exige método específico" (mapeamento 13/11 e MTE, maio/2026). Vale a segunda.
-2. **Planos ligados aos riscos e trilhas** (site: "cada risco vira uma medida de controle com conteúdo das trilhas associado") × mapeamento de 13/11 (vínculo ainda não existe). Vale o mapeamento.
+1. **"HSE é a metodologia que a NR-1 pede"** (site até 27/11/2026, já corrigido) × "a NR-1 não exige método específico" (mapeamento 13/11 e MTE, maio/2026). Vale a segunda.
+2. **Planos ligados aos riscos e trilhas** (site até 27/11/2026, já corrigido) × mapeamento de 13/11 (vínculo ainda não existe). Vale o mapeamento.
 3. **Evidências "para a fiscalização"** (site) × mapeamento (hoje é upload; sem dossiê). Vale o mapeamento.
 4. **Grupo mínimo de 5** (site, blog de 25/11, abordagem de 27/11) × testes de 30/09 e mapeamento de 13/11 (mínimo não imposto em todos os recortes). Os textos mais recentes são de marketing; os de produto são mais antigos. Trate o mínimo de 5 como regra da empresa e confirme com o produto o estado técnico antes de garantir.
 5. **Criação manual de plano** (teste de 30/09: não havia) × site (mostra "Nova ação"). Confirmar.
