@@ -154,7 +154,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ erro: 'Use POST' });
   const quem = await exigirTime(req, res);
   if (!quem) return;
-  if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ erro: 'O assistente ainda não foi ligado: falta a chave ANTHROPIC_API_KEY nas variáveis da Vercel.' });
+  // tolera a chave colada com espaços, aspas, quebra de linha ou com "ANTHROPIC_API_KEY=" na frente
+  const chave = (process.env.ANTHROPIC_API_KEY ?? '').trim().replace(/^ANTHROPIC_API_KEY\s*=\s*/, '').replace(/^["']|["']$/g, '').trim();
+  if (!chave) return res.status(503).json({ erro: 'O assistente ainda não foi ligado: falta a chave ANTHROPIC_API_KEY nas variáveis da Vercel.' });
 
   const b = (req.body ?? {}) as Json;
   const modo = MODOS[String(b.modo ?? '')] ? String(b.modo) : 'conversa';
@@ -167,7 +169,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!historico.length || historico[historico.length - 1].role !== 'user') return res.status(400).json({ erro: 'Mande uma mensagem' });
 
   const db = admin();
-  const client = new Anthropic();
+  const client = new Anthropic({ apiKey: chave });
   const hoje = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric' });
   // a base fica num bloco fixo (cacheado); o modo e a data vêm depois do ponto de cache
   const system: Anthropic.TextBlockParam[] = [
@@ -223,7 +225,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ texto: 'Precisei de passos demais para responder. Tente uma pergunta mais específica.', relatorio: salvo });
   } catch (e) {
     if (e instanceof Anthropic.RateLimitError) return res.status(429).json({ erro: 'Muitas perguntas seguidas. Espere um minuto e tente de novo.' });
-    if (e instanceof Anthropic.AuthenticationError) return res.status(503).json({ erro: 'A chave ANTHROPIC_API_KEY da Vercel não foi aceita.' });
+    if (e instanceof Anthropic.AuthenticationError) return res.status(503).json({ erro: `A Anthropic recusou a chave ANTHROPIC_API_KEY da Vercel (começa com ${chave.slice(0, 10)}…, ${chave.length} caracteres). Gere uma nova em console.anthropic.com → API keys, cole na Vercel (Production) sem aspas nem espaços e faça Redeploy.` });
     if (e instanceof Anthropic.APIError) { console.error('assistente:', e.status, e.message); return res.status(502).json({ erro: 'O assistente está indisponível agora. Tente de novo em instantes.' }); }
     console.error('assistente:', (e as Error).message);
     return res.status(500).json({ erro: 'Erro no assistente' });
