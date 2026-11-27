@@ -47,7 +47,7 @@ export const PAPEIS_CONTATO: Record<string, string> = {
 };
 
 const ORIGENS: Record<string, string> = {
-  site: 'Site', evento: 'Evento', indicacao: 'Indicação', linkedin: 'LinkedIn', whatsapp: 'WhatsApp', prospeccao: 'Prospecção',
+  site: 'Site', evento: 'Evento', indicacao: 'Indicação', linkedin: 'LinkedIn', whatsapp: 'WhatsApp', prospeccao: 'Prospecção', prospeccao_clientes_grou: 'Prospecção – clientes Grou',
   parceiro: 'Parceiro', manual: 'Cadastro manual', anuncios: 'Anúncios', importacao: 'Importação de lista', lista_fria: 'Lista fria', outro: 'Outro',
 };
 export const nomeOrigem = (o: string | null | undefined) => (o ? ORIGENS[o] ?? o : '—');

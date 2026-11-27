@@ -8,7 +8,7 @@ import { Campo, Carregando, Modal, Selo, Vazio } from '../components/ui';
 import { cnpjValido } from '../../shared/pontuacao';
 
 export const ESTAGIOS: Record<EstagioConta, { nome: string; cor: string }> = {
-  lead: { nome: 'Lead', cor: '' }, oportunidade: { nome: 'Em negociação', cor: 'azul' },
+  prospeccao: { nome: 'Prospecção', cor: 'amarelo' }, lead: { nome: 'Lead', cor: '' }, oportunidade: { nome: 'Em negociação', cor: 'azul' },
   cliente: { nome: 'Cliente', cor: 'verde' }, ex_cliente: { nome: 'Ex-cliente', cor: 'vermelho' },
 };
 

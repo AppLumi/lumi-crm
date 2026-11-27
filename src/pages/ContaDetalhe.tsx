@@ -18,7 +18,7 @@ import { contasPorDominio, dominioDoEmail, dominiosDaConta, vincularLeadAConta, 
 interface Pessoa { tipo: 'lead' | 'contato'; id: string; nome: string; email: string | null; cargo: string | null; whatsapp: string | null;
   aceita_marketing: boolean; consentimento_em: string | null; contato_id: string | null; conta_id: string | null; conta_nome?: string | null }
 
-const ORDEM_ESTAGIO = ['lead', 'ex_cliente', 'oportunidade', 'cliente'];
+const ORDEM_ESTAGIO = ['prospeccao', 'lead', 'ex_cliente', 'oportunidade', 'cliente'];
 const literal = (t: string) => t.replace(/[\\%_,()]/g, ' ');
 
 /** Leads e contatos que podem entrar nesta empresa: por domínio (sugestão) ou pela busca. */
@@ -216,7 +216,7 @@ export default function ContaDetalhe() {
 
   const novaOportunidade = () => executar(async () => {
     const r = ok(await supabase.from('oportunidades').insert({ conta_id: conta.id, titulo: `Lumi · ${conta.nome}`, vidas: conta.colaboradores, dono: perfil?.id }).select('id').single());
-    if (conta.estagio === 'lead') await supabase.from('contas').update({ estagio: 'oportunidade' }).eq('id', conta.id);
+    if (conta.estagio === 'lead' || conta.estagio === 'prospeccao') await supabase.from('contas').update({ estagio: 'oportunidade' }).eq('id', conta.id);
     ir(`/oportunidades/${r!.id}`);
   }, 'Oportunidade criada');
 

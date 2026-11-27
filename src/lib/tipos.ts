@@ -1,5 +1,5 @@
 export type Papel = 'socia' | 'negocios' | 'marketing' | 'tecnologia';
-export type EstagioConta = 'lead' | 'oportunidade' | 'cliente' | 'ex_cliente';
+export type EstagioConta = 'prospeccao' | 'lead' | 'oportunidade' | 'cliente' | 'ex_cliente';
 export type StatusLead = 'novo' | 'em_contato' | 'qualificado' | 'nutricao' | 'descartado' | 'convertido';
 export type Etapa = 'qualificacao' | 'diagnostico' | 'demo' | 'piloto' | 'proposta' | 'negociacao' | 'ganha' | 'perdida';
 export type Plano = 'starter' | 'premium';

@@ -110,7 +110,7 @@ export default function CardDetalhe() {
       link = r.ok ? r.link : r.link!;
     } else if (card.conta_id) {
       const op = ok(await supabase.from('oportunidades').insert({ conta_id: card.conta_id, titulo: `Lumi · ${card.conta_nome ?? card.titulo}`, dono: card.dono ?? perfil?.id }).select('id').single())!;
-      await supabase.from('contas').update({ estagio: 'oportunidade' }).eq('id', card.conta_id).eq('estagio', 'lead');
+      await supabase.from('contas').update({ estagio: 'oportunidade' }).eq('id', card.conta_id).in('estagio', ['lead', 'prospeccao']);
       link = `/oportunidades/${op.id}`;
     } else throw new Error('Vincule o card a uma empresa antes de levar para o funil de vendas');
     // o histórico do card vai junto para o negócio

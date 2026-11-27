@@ -43,7 +43,7 @@ async function paraVendas(p: PessoaFunil, autor: string | null): Promise<Resulta
       conta_id: p.conta_id, titulo: `Lumi · ${(conta as ContaResumo).nome}`, vidas: p.colaboradores ?? (conta as { colaboradores: number | null }).colaboradores,
       dono: p.dono ?? autor, decisor_id: contatoId,
     }).select('id').single())!;
-    await supabase.from('contas').update({ estagio: 'oportunidade' }).eq('id', p.conta_id).eq('estagio', 'lead');
+    await supabase.from('contas').update({ estagio: 'oportunidade' }).eq('id', p.conta_id).in('estagio', ['lead', 'prospeccao']);
     ok(await supabase.from('leads').update({ status: 'qualificado', contato_id: contatoId, oportunidade_id: op.id,
       primeiro_contato_em: p.primeiro_contato_em ?? new Date().toISOString() }).eq('id', p.id));
     await supabase.from('atividades').update({ conta_id: p.conta_id, oportunidade_id: op.id }).eq('lead_id', p.id);
@@ -59,7 +59,7 @@ async function paraVendas(p: PessoaFunil, autor: string | null): Promise<Resulta
   const op = ok(await supabase.from('oportunidades').insert({
     conta_id: c.id, titulo: `Lumi · ${c.nome}`, vidas: c.colaboradores, dono: p.dono ?? autor, decisor_id: p.id,
   }).select('id').single())!;
-  await supabase.from('contas').update({ estagio: 'oportunidade' }).eq('id', c.id).eq('estagio', 'lead');
+  await supabase.from('contas').update({ estagio: 'oportunidade' }).eq('id', c.id).in('estagio', ['lead', 'prospeccao']);
   await atividade({ titulo: `${p.nome} entrou no funil de vendas`, conta_id: c.id, contato_id: p.id, oportunidade_id: op.id, autor });
   return { ok: true, link: `/oportunidades/${op.id}` };
 }

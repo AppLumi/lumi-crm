@@ -13,7 +13,7 @@ import { pessoaDeContato, type PessoaFunil } from '../lib/funis';
 import { empresaPara, inserirContatos } from '../lib/contatos';
 
 type Linha = Contato & { contas: { nome: string } | null };
-const ORIGENS_CONTATO = ['prospeccao', 'lista_fria', 'importacao', 'evento', 'linkedin', 'indicacao', 'parceiro', 'manual', 'outro'];
+const ORIGENS_CONTATO = ['prospeccao', 'prospeccao_clientes_grou', 'lista_fria', 'importacao', 'evento', 'linkedin', 'indicacao', 'parceiro', 'manual', 'outro'];
 const vazio = { id: '', nome: '', cargo: '', papel: 'outro', email: '', whatsapp: '', linkedin: '', aceita_marketing: false, origem: 'manual', evento: '', dono: '', conta_id: '', conta_nome: '' };
 
 export default function Contatos() {
@@ -23,6 +23,7 @@ export default function Contatos() {
   const [contatos, setContatos] = useState<Linha[] | null>(null);
   const [busca, setBusca] = useState('');
   const [origem, setOrigem] = useState('');
+  const [listaF, setListaF] = useState(params.get('lista') ?? '');
   const [empresa, setEmpresa] = useState<'' | 'com' | 'sem'>('');
   const [marcados, setMarcados] = useState<Set<string>>(new Set());
   const [paraFunil, setParaFunil] = useState<PessoaFunil[] | null>(null);
@@ -34,17 +35,25 @@ export default function Contatos() {
   const [resultado, setResultado] = useState('');
 
   const carregar = useCallback(async () => {
-    const r = await supabase.from('contatos').select('*, contas(nome)').order('criado_em', { ascending: false }).limit(3000);
-    setContatos((r.data ?? []) as Linha[]);
+    // o Supabase devolve no máximo 1.000 linhas por vez: busca em páginas (listas importadas passam disso)
+    const todos: Linha[] = [];
+    for (let de = 0; de < 50000; de += 1000) {
+      const r = await supabase.from('contatos').select('*, contas(nome)').order('criado_em', { ascending: false }).order('id').range(de, de + 999);
+      if (r.error) break;
+      todos.push(...((r.data ?? []) as Linha[]));
+      if ((r.data ?? []).length < 1000) break;
+    }
+    setContatos(todos);
   }, []);
   useEffect(() => { carregar(); }, [carregar]);
 
+  const listas = useMemo(() => [...new Set((contatos ?? []).map((c) => c.evento).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b), 'pt-BR', { numeric: true })) as string[], [contatos]);
   const origens = useMemo(() => [...new Set((contatos ?? []).map((c) => c.origem).filter(Boolean))].sort() as string[], [contatos]);
   const lista = useMemo(() => {
     const b = busca.trim().toLowerCase();
     return (contatos ?? []).filter((c) => (!b || [c.nome, c.email, c.cargo, c.contas?.nome].some((x) => x?.toLowerCase().includes(b)))
-      && (!origem || c.origem === origem) && (!empresa || (empresa === 'com' ? !!c.conta_id : !c.conta_id)));
-  }, [contatos, busca, origem, empresa]);
+      && (!origem || c.origem === origem) && (!listaF || c.evento === listaF) && (!empresa || (empresa === 'com' ? !!c.conta_id : !c.conta_id)));
+  }, [contatos, busca, origem, listaF, empresa]);
 
   const alternar = (id: string) => setMarcados((m) => { const n = new Set(m); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const todos = lista.length > 0 && lista.every((c) => marcados.has(c.id));
@@ -142,6 +151,10 @@ export default function Contatos() {
         <select value={origem} onChange={(e) => setOrigem(e.target.value)}>
           <option value="">Todas as origens</option>
           {origens.map((o) => <option key={o} value={o}>{nomeOrigem(o)}</option>)}
+        </select>
+        <select value={listaF} onChange={(e) => setListaF(e.target.value)}>
+          <option value="">Todas as listas</option>
+          {listas.map((l) => <option key={l} value={l}>{l}</option>)}
         </select>
         <select value={empresa} onChange={(e) => setEmpresa(e.target.value as typeof empresa)}>
           <option value="">Com ou sem empresa</option>
