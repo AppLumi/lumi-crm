@@ -2,6 +2,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { enderecoResposta } from '../shared/emailRecebido.js';
 
 export const env = (k: string, obrigatoria = true): string => {
   const v = (process.env[k] ?? '').trim();
@@ -114,7 +115,10 @@ export async function consultarCnpj(cnpj: string): Promise<Record<string, unknow
 }
 
 /** Envia e-mail pelo Resend. Devolve o id do envio. */
-export async function enviarEmail(m: { para: string[]; assunto: string; html: string; texto: string; responderPara?: string; de?: string }) {
+export async function enviarEmail(m: {
+  para: string[]; assunto: string; html: string; texto: string; responderPara?: string; de?: string;
+  cabecalhos?: Record<string, string>; anexos?: { filename: string; path: string }[];
+}) {
   const r = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${env('RESEND_API_KEY')}`, 'Content-Type': 'application/json' },
@@ -122,12 +126,26 @@ export async function enviarEmail(m: { para: string[]; assunto: string; html: st
       from: m.de || env('EMAIL_REMETENTE', false) || 'Lumi <comercial@applumi.io>',
       to: m.para, subject: m.assunto, html: m.html, text: m.texto,
       ...(m.responderPara ? { reply_to: m.responderPara } : {}),
+      ...(m.cabecalhos && Object.keys(m.cabecalhos).length ? { headers: m.cabecalhos } : {}),
+      ...(m.anexos?.length ? { attachments: m.anexos } : {}),
     }),
   });
   const j = (await r.json().catch(() => ({}))) as { id?: string; message?: string };
   if (!r.ok || !j.id) throw new Error(`Resend ${r.status}: ${j.message ?? 'falha no envio'}`);
   return j.id;
 }
+
+/** Lê da API do Resend (ex.: e-mail recebido e seus anexos). Devolve null quando falha. */
+export async function lerResend<T = Record<string, unknown>>(caminho: string): Promise<T | null> {
+  // ler e-mail recebido exige chave com acesso total; a de envio (RESEND_API_KEY) costuma ser só de envio
+  const chave = env('RESEND_API_KEY_LEITURA', false) || env('RESEND_API_KEY');
+  const r = await fetch(`https://api.resend.com${caminho}`, { headers: { Authorization: `Bearer ${chave}` } });
+  if (!r.ok) { console.warn('resend:', caminho.split('/').slice(0, 3).join('/'), r.status); return null; }
+  return (await r.json().catch(() => null)) as T | null;
+}
+
+/** Para onde vão as respostas de quem envia: o endereço do CRM (se o domínio de respostas estiver configurado). */
+export const responderPara = (emailPessoa: string) => enderecoResposta(emailPessoa, env('EMAIL_RESPOSTAS_DOMINIO', false));
 
 /** Envia até 100 e-mails numa chamada (API de lote do Resend). Devolve os ids na mesma ordem. */
 export async function enviarLote(msgs: { para: string; assunto: string; html: string; texto: string; de: string; responderPara?: string; cabecalhos?: Record<string, string> }[]): Promise<string[]> {

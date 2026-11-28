@@ -51,7 +51,16 @@ O banco reforça as mesmas regras (trigger `proposta_regras`), então não dá p
 2. Crie, na Hostinger (DNS de applumi.io), os registros que o Resend mostrar: SPF, DKIM e MX de retorno. Eles ficam num subdomínio de envio e não mexem nos e-mails que já funcionam.
 3. Se ainda não existir, crie também um DMARC: `TXT _dmarc` → `v=DMARC1; p=none; rua=mailto:<seu e-mail>`.
 4. Crie uma API key com permissão só de envio.
-5. Em **Webhooks**, aponte para `https://crm.applumi.io/api/webhooks/resend` com os eventos delivered, opened, clicked, bounced e complained. Copie o signing secret.
+5. Em **Webhooks**, aponte para `https://crm.applumi.io/api/webhooks/resend` com os eventos sent, delivered, opened, clicked, bounced, complained e received. Copie o signing secret.
+
+### 2.1 Respostas por e-mail dentro do CRM
+Os e-mails saem com "responder para" um endereço do CRM (`bruna@respostas.applumi.io`, por exemplo). O Resend recebe a resposta, o webhook guarda no CRM (aba E-mails › Recebidos e linha do tempo), cria a tarefa "Responder e-mail de…" pra quem enviou e manda um aviso, com os anexos, pro e-mail da pessoa.
+1. Rode a migração `0008_emails_recebidos.sql` no Supabase.
+2. No Resend, em **Domains**, adicione `respostas.applumi.io` e ligue **Receiving**. Copie o registro MX que ele mostrar.
+3. Na Hostinger (DNS de applumi.io), crie o MX com nome `respostas` e o valor e a prioridade do Resend. Ele vale só pra esse subdomínio: o e-mail @applumi.io continua como está.
+4. No webhook do passo 5 acima, marque também `email.received` e `email.sent`.
+5. Crie uma API key com **Full access** (ler a resposta exige) e coloque em `RESEND_API_KEY_LEITURA`.
+6. Na Vercel, crie `EMAIL_RESPOSTAS_DOMINIO=respostas.applumi.io` e faça redeploy. Sem essa variável, as respostas continuam indo pro e-mail de quem enviou, como antes.
 
 ### 3. Vercel
 1. Importe este repositório (framework: Vite).
@@ -64,6 +73,8 @@ O banco reforça as mesmas regras (trigger `proposta_regras`), então não dá p
 | `SUPABASE_SERVICE_ROLE_KEY` | chave service role (secreta, só no servidor) |
 | `RESEND_API_KEY` | chave do Resend |
 | `RESEND_WEBHOOK_SECRET` | signing secret do webhook |
+| `RESEND_API_KEY_LEITURA` | chave do Resend com Full access, só pra ler as respostas recebidas |
+| `EMAIL_RESPOSTAS_DOMINIO` | `respostas.applumi.io` (liga as respostas dentro do CRM) |
 | `EMAIL_REMETENTE` | `Lumi <comercial@applumi.io>` (avisos internos) |
 | `EMAIL_DOMINIO` | `applumi.io` |
 | `CRM_URL` | `https://crm.applumi.io` |

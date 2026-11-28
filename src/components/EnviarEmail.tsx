@@ -13,6 +13,8 @@ export interface DestinoEmail {
   sugestoes?: { email: string; nome: string }[];
   /** texto já pronto (ex.: sugestão de abordagem), que ainda pode ser editado antes de enviar */
   inicial?: { assunto: string; corpo: string };
+  /** resposta a um e-mail recebido: sai na mesma conversa, com o histórico citado */
+  responde_a?: string;
 }
 
 const preencher = (t: string, v: Record<string, string>) => t.replace(/\{\{(\w+)\}\}/g, (_, k: string) => v[k] ?? `{{${k}}}`);
@@ -51,15 +53,17 @@ export default function EnviarEmail({ destino, fechar, enviado }: { destino: Des
     if (lista.length > 10) throw new Error('Envie para no máximo 10 e-mails de uma vez');
     if (/\{\{\w+\}\}/.test(assunto + corpo)) throw new Error('Ainda há campos {{…}} sem preencher no texto');
     if (/\[[^\]]+\]/.test(corpo)) throw new Error('Troque os trechos entre colchetes antes de enviar');
-    await api('emails/enviar', { corpo: { para: lista.join(', '), assunto, corpo, lead_id: destino.lead_id, contato_id: destino.contato_id, conta_id: destino.conta_id, oportunidade_id: destino.oportunidade_id, card_id: destino.card_id } });
+    await api('emails/enviar', { corpo: { para: lista.join(', '), assunto, corpo, lead_id: destino.lead_id, contato_id: destino.contato_id, conta_id: destino.conta_id, oportunidade_id: destino.oportunidade_id, card_id: destino.card_id, responde_a: destino.responde_a } });
     enviado?.();
     fechar();
   }, 'E-mail enviado');
 
   return (
-    <Modal titulo={`E-mail para ${destino.nome}`} aberto fechar={fechar} largura={700}
+    <Modal titulo={destino.responde_a ? `Responder ${destino.nome}` : `E-mail para ${destino.nome}`} aberto fechar={fechar} largura={700}
       rodape={<><button className="btn" onClick={fechar}>Cancelar</button><button className="btn primario" disabled={ocupado || !assunto || !corpo || !lista.length} onClick={enviar}>Enviar{lista.length > 1 ? ` para ${lista.length}` : ''}</button></>}>
-      <div className="aviso info">Sai como “{perfil?.nome} · Lumi”, e as respostas chegam no seu e-mail ({perfil?.email}).</div>
+      <div className="aviso info">{destino.responde_a
+        ? <>Resposta na mesma conversa. A mensagem anterior vai citada no fim, e a tarefa “responder” é concluída.</>
+        : <>Sai como “{perfil?.nome} · Lumi”. Quando responderem, a resposta aparece aqui no CRM e você recebe um aviso em {perfil?.email}.</>}</div>
       <div className="linha-campos">
         <Campo rotulo="Para" ajuda="Pode ser qualquer e-mail, de dentro ou de fora da empresa. Vários: separe por vírgula.">
           <input value={para} onChange={(e) => setPara(e.target.value)} placeholder="nome@empresa.com.br, outra@empresa.com.br" />

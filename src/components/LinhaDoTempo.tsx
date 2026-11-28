@@ -3,7 +3,9 @@ import { supabase, ok } from '../lib/supabase';
 import { useAcao, useSessao } from '../lib/sessao';
 import { TIPOS_ATIVIDADE, dataHora, relativo } from '../lib/formato';
 import type { Atividade, TipoAtividade } from '../lib/tipos';
-import { Campo, Vazio } from './ui';
+import { Campo, Selo, Vazio } from './ui';
+import EnviarEmail, { type DestinoEmail } from './EnviarEmail';
+import { CAMPOS_RECEBIDO, destinoResposta, type Recebido } from '../lib/respostas';
 
 type Alvo = { lead_id?: string; conta_id?: string; oportunidade_id?: string; contato_id?: string; card_id?: string };
 
@@ -23,10 +25,19 @@ export default function LinhaDoTempo({ alvo, filtro, atualizar }: { alvo: Alvo; 
   const [descricao, setDescricao] = useState('');
   const [vence, setVence] = useState('');
   const [resp, setResp] = useState('');
+  const [recebidos, setRecebidos] = useState<Map<string, Recebido>>(new Map());
+  const [responder, setResponder] = useState<DestinoEmail | null>(null);
 
   const carregar = useCallback(async () => {
     const r = await supabase.from('atividades').select('*').eq(filtro.coluna, filtro.valor).order('criado_em', { ascending: false }).limit(200);
-    setItens((r.data ?? []) as Atividade[]);
+    const lista = (r.data ?? []) as Atividade[];
+    setItens(lista);
+    // respostas por e-mail: pra mostrar "Responder" ou "Respondido"
+    const ids = [...new Set(lista.map((a) => a.email_recebido_id).filter(Boolean))] as string[];
+    if (ids.length) {
+      const e = await supabase.from('emails_recebidos').select(CAMPOS_RECEBIDO).in('id', ids);
+      setRecebidos(new Map(((e.data ?? []) as Recebido[]).map((x) => [x.id, x])));
+    }
   }, [filtro.coluna, filtro.valor]);
 
   useEffect(() => { carregar(); }, [carregar, atualizar]);
@@ -86,7 +97,14 @@ export default function LinhaDoTempo({ alvo, filtro, atualizar }: { alvo: Alvo; 
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                 <strong style={{ textDecoration: a.concluida_em ? 'line-through' : undefined }}>{a.titulo}</strong>
-                {a.tipo === 'tarefa' && <button className="btn pequeno" onClick={() => concluir(a)}>{a.concluida_em ? 'Reabrir' : 'Concluir'}</button>}
+                <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  {a.tipo === 'email' && a.email_recebido_id && recebidos.get(a.email_recebido_id) && (() => {
+                    const r = recebidos.get(a.email_recebido_id)!;
+                    return r.respondido_em ? <Selo cor="verde">Respondido</Selo>
+                      : <button className="btn pequeno primario" onClick={() => setResponder(destinoResposta(r))}>Responder</button>;
+                  })()}
+                  {a.tipo === 'tarefa' && <button className="btn pequeno" onClick={() => concluir(a)}>{a.concluida_em ? 'Reabrir' : 'Concluir'}</button>}
+                </span>
               </div>
               <div className="quando" title={dataHora(a.criado_em)}>
                 {relativo(a.criado_em)}
@@ -99,6 +117,7 @@ export default function LinhaDoTempo({ alvo, filtro, atualizar }: { alvo: Alvo; 
           </li>
         ))}
       </ul>
+      <EnviarEmail destino={responder} fechar={() => setResponder(null)} enviado={carregar} />
     </div>
   );
 }

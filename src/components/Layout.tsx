@@ -8,7 +8,7 @@ import Assistente from './Assistente';
 import Logo from './Logo';
 import { Carregando } from './Splash';
 
-type Contador = 'leads' | 'tarefas' | 'aprovacoes';
+type Contador = 'leads' | 'tarefas' | 'aprovacoes' | 'respostas';
 interface Item { para: string; nome: string; icone: NomeIcone; contador?: Contador }
 
 const GRUPOS: { titulo: string; itens: Item[] }[] = [
@@ -22,7 +22,7 @@ const GRUPOS: { titulo: string; itens: Item[] }[] = [
       { para: '/contas', nome: 'Contas', icone: 'contas' },
     ],
   },
-  { titulo: 'Relacionamento', itens: [{ para: '/emails', nome: 'E-mails', icone: 'emails' }] },
+  { titulo: 'Relacionamento', itens: [{ para: '/emails', nome: 'E-mails', icone: 'emails', contador: 'respostas' }] },
   { titulo: 'Gestão', itens: [{ para: '/relatorios', nome: 'Relatórios', icone: 'relatorios' }, { para: '/configuracoes', nome: 'Configurações', icone: 'configuracoes' }] },
 ];
 const TODOS = GRUPOS.flatMap((g) => g.itens);
@@ -39,7 +39,7 @@ const ehMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigat
 export default function Layout() {
   const { perfil, sair } = useSessao();
   const { pathname } = useLocation();
-  const [cont, setCont] = useState<Record<Contador, number>>({ leads: 0, tarefas: 0, aprovacoes: 0 });
+  const [cont, setCont] = useState<Record<Contador, number>>({ leads: 0, tarefas: 0, aprovacoes: 0, respostas: 0 });
   const [recolhido, setRecolhido] = useState(lerPreferencia);
   const [comando, setComando] = useState(false);
   const [gota, setGota] = useState<{ top: number; height: number } | null>(null);
@@ -81,15 +81,18 @@ export default function Layout() {
     if (!perfil) return;
     const carregar = async () => {
       const agora = new Date().toISOString();
-      const [l, t, a] = await Promise.all([
+      const [l, t, a, r] = await Promise.all([
         supabase.from('leads').select('id', { count: 'exact', head: true }).eq('status', 'novo'),
         supabase.from('atividades').select('id', { count: 'exact', head: true }).eq('tipo', 'tarefa').is('concluida_em', null)
           .eq('responsavel', perfil.id).lte('vence_em', agora),
         perfil.aprova_desconto
           ? supabase.from('propostas').select('id', { count: 'exact', head: true }).eq('status', 'aguardando_aprovacao')
           : Promise.resolve({ count: 0 }),
+        // respostas por e-mail esperando quem enviou (sem a migração 0008, a contagem só volta vazia)
+        supabase.from('emails_recebidos').select('id', { count: 'exact', head: true }).eq('responsavel', perfil.id)
+          .is('respondido_em', null).is('arquivado_em', null).eq('automatico', false).not('tarefa_id', 'is', null),
       ]);
-      setCont({ leads: l.count ?? 0, tarefas: t.count ?? 0, aprovacoes: a.count ?? 0 });
+      setCont({ leads: l.count ?? 0, tarefas: t.count ?? 0, aprovacoes: a.count ?? 0, respostas: r.count ?? 0 });
     };
     carregar();
     const i = window.setInterval(carregar, 60000);

@@ -47,5 +47,5 @@ export function cnpjValido(cnpj: string): boolean {
 
 export const PESOS_EVENTOS: Record<string, number> = {
   demo_solicitada: 40, presenca_evento: 25, formulario_contato: 25, inscricao_evento: 20, download_material: 15,
-  whatsapp_resposta: 15, visita_planos: 10, email_clique: 8, visita_site: 3, email_aberto: 3,
+  email_respondido: 20, whatsapp_resposta: 15, visita_planos: 10, email_clique: 8, visita_site: 3, email_aberto: 3,
 };

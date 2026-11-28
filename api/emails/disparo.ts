@@ -2,7 +2,7 @@
 // modo "previa": só conta quem recebe e quem fica de fora. "teste": manda um exemplo para quem está disparando.
 // "enviar": manda para todos, um e-mail por pessoa, personalizado, com link de descadastro, e registra na linha do tempo.
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { admin, enviarEmail, enviarLote, env, esc, exigirTime, linkDescadastro, texto, textoParaHtml } from '../_lib.js';
+import { admin, enviarEmail, enviarLote, env, esc, exigirTime, linkDescadastro, responderPara, texto, textoParaHtml } from '../_lib.js';
 import { LIMITE_DISPARO, preencher, problemasDoTexto, separarDestinatarios, variaveisDoLead, type LeadDisparo } from '../../shared/disparo.js';
 
 export const config = { maxDuration: 60 };
@@ -82,7 +82,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (modo === 'teste') {
     const m = montar(enviar[0]);
-    await enviarEmail({ para: [quem.perfil.email], assunto: `[Teste] ${m.assunto}`, texto: m.texto, html: m.html, de, responderPara: quem.perfil.email });
+    await enviarEmail({ para: [quem.perfil.email], assunto: `[Teste] ${m.assunto}`, texto: m.texto, html: m.html, de, responderPara: responderPara(quem.perfil.email) });
     return res.status(200).json({ ok: true, para: quem.perfil.email, exemplo_de: enviar[0].nome });
   }
 
@@ -111,7 +111,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       const resendIds = await enviarLote(lote.map((l, k) => ({
         para: l.email!, assunto: msgs[k].assunto, html: msgs[k].html, texto: msgs[k].texto, de,
-        responderPara: quem.perfil.email, cabecalhos: msgs[k].cabecalhos,
+        responderPara: responderPara(quem.perfil.email), cabecalhos: msgs[k].cabecalhos,
       })));
       const quando = agora();
       await Promise.all(linhas.map((x: { id: string }, k: number) =>

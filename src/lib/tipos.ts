@@ -51,7 +51,7 @@ export interface Proposta {
 export interface Atividade {
   id: string; tipo: TipoAtividade; titulo: string; descricao: string | null; conta_id: string | null; contato_id: string | null;
   lead_id: string | null; oportunidade_id: string | null; autor: string | null; responsavel: string | null;
-  vence_em: string | null; concluida_em: string | null; criado_em: string;
+  vence_em: string | null; concluida_em: string | null; criado_em: string; email_recebido_id?: string | null;
 }
 
 export interface ModeloEmail { id: string; nome: string; categoria: string; assunto: string; corpo: string; ativo: boolean }

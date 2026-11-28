@@ -35,6 +35,8 @@ beforeAll(async () => {
   await db.exec(readFileSync(new URL('../supabase/migrations/0006_assistente.sql', import.meta.url), 'utf8'));
   await db.exec(readFileSync(new URL('../supabase/migrations/0007_proposta_apresentacao.sql', import.meta.url), 'utf8'));
   await db.exec(readFileSync(new URL('../supabase/migrations/0007_proposta_apresentacao.sql', import.meta.url), 'utf8'));
+  await db.exec(readFileSync(new URL('../supabase/migrations/0008_emails_recebidos.sql', import.meta.url), 'utf8'));
+  await db.exec(readFileSync(new URL('../supabase/migrations/0008_emails_recebidos.sql', import.meta.url), 'utf8'));
   await db.exec(`
     insert into auth.users values ('${SOCIA}', 'socia@applumi.io'), ('${BRUNA}', 'bruna@applumi.io');
     insert into perfis (id, nome, email, papel, aprova_desconto) values
@@ -134,6 +136,26 @@ describe('migração', () => {
     const resto = await db.query(`select 1 from atividades where card_id = $1`, [card]);
     expect(resto.rows.length).toBe(0);
     await expect(db.query(`insert into funis (nome, slug) values ('Y', 'Com Espaço')`)).rejects.toThrow();
+  });
+
+  it('respostas recebidas: o time lê e arquiva, mas não reescreve a resposta', async () => {
+    const e = await db.query<{ id: string }>(`insert into emails (para, assunto, corpo, message_id) values ('ana@exemplo.invalid', 'Proposta', 'Oi', '<m1@x>') returning id`);
+    const r = await db.query<{ id: string }>(`insert into emails_recebidos (resend_id, de, assunto, resposta, em_resposta_a, responsavel)
+      values ('rcv_1', 'ana@exemplo.invalid', 'Re: Proposta', 'Pode ser quinta', $1, '${BRUNA}') returning id`, [e.rows[0].id]);
+    await expect(db.query(`insert into emails_recebidos (resend_id, de) values ('rcv_1', 'outra@exemplo.invalid')`)).rejects.toThrow();
+    await db.exec('set role authenticated');
+    try {
+      const lidos = await como(BRUNA, `select id from emails_recebidos where id = $1`, [r.rows[0].id]);
+      expect(lidos.rows.length).toBe(1);
+      await como(BRUNA, `update emails_recebidos set arquivado_em = now() where id = $1`, [r.rows[0].id]);
+      await expect(como(BRUNA, `update emails_recebidos set resposta = 'outra coisa' where id = $1`, [r.rows[0].id])).rejects.toThrow();
+      expect((await como(null, `select id from emails_recebidos`)).rows.length).toBe(0);
+    } finally {
+      await db.exec('reset role');
+    }
+    const a = await db.query<{ id: string }>(`insert into atividades (tipo, titulo, email_recebido_id) values ('email', 'Resposta recebida', $1) returning id`, [r.rows[0].id]);
+    expect(a.rows.length).toBe(1);
+    await db.query(`update emails set responde_a = $1 where id = $2`, [r.rows[0].id, e.rows[0].id]);
   });
 
   it('ninguém muda o próprio papel', async () => {

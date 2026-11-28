@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ok, supabase } from '../lib/supabase';
-import { useAcao } from '../lib/sessao';
+import { useAcao, useSessao } from '../lib/sessao';
 import { dataHora } from '../lib/formato';
 import type { ModeloEmail } from '../lib/tipos';
 import { Campo, Carregando, Kpi, Modal, Selo, Vazio } from '../components/ui';
+import EnviarEmail, { type DestinoEmail } from '../components/EnviarEmail';
+import { CAMPOS_RECEBIDO, destinoResposta, linkRecebido, situacao, type Recebido } from '../lib/respostas';
 
 interface Email {
   id: string; para: string; assunto: string; status: string; erro: string | null; lead_id: string | null; conta_id: string | null;
@@ -45,7 +47,13 @@ async function carregarDisparos(): Promise<Disparo[]> {
 
 export default function Emails() {
   const { ocupado, executar } = useAcao();
-  const [aba, setAba] = useState<'enviados' | 'disparos' | 'modelos'>('enviados');
+  const { perfil, time } = useSessao();
+  const [aba, setAba] = useState<'recebidos' | 'enviados' | 'disparos' | 'modelos'>('recebidos');
+  const [recebidos, setRecebidos] = useState<Recebido[] | null>(null);
+  const [semTabela, setSemTabela] = useState(false);
+  const [filtroR, setFiltroR] = useState<'meus' | 'pendentes' | 'todos'>('meus');
+  const [aberto, setAberto] = useState<string | null>(null);
+  const [responder, setResponder] = useState<DestinoEmail | null>(null);
   const [disparos, setDisparos] = useState<Disparo[] | null>(null);
   const [emails, setEmails] = useState<Email[] | null>(null);
   const [modelos, setModelos] = useState<ModeloEmail[]>([]);
@@ -58,7 +66,16 @@ export default function Emails() {
     ]);
     setEmails((e.data ?? []) as Email[]);
     setModelos((m.data ?? []) as ModeloEmail[]);
+    const r = await supabase.from('emails_recebidos').select(CAMPOS_RECEBIDO).order('recebido_em', { ascending: false }).limit(300);
+    setSemTabela(!!r.error);
+    setRecebidos((r.data ?? []) as Recebido[]);
   }, []);
+
+  const arquivar = (r: Recebido) => executar(async () => {
+    ok(await supabase.from('emails_recebidos').update({ arquivado_em: r.arquivado_em ? null : new Date().toISOString() }).eq('id', r.id));
+    if (!r.arquivado_em && r.tarefa_id) await supabase.from('atividades').update({ concluida_em: new Date().toISOString() }).eq('id', r.tarefa_id).is('concluida_em', null);
+    await carregar();
+  }, r.arquivado_em ? 'Voltou para a lista' : 'Arquivado');
   useEffect(() => { carregar(); }, [carregar]);
   useEffect(() => { if (aba === 'disparos') carregarDisparos().then(setDisparos); }, [aba]);
 
@@ -78,16 +95,64 @@ export default function Emails() {
   return (
     <>
       <div className="topo">
-        <div><h1>E-mails</h1><p>Envios do time, individuais e em massa, com abertura e clique. Respostas chegam no e-mail de quem enviou.</p></div>
+        <div><h1>E-mails</h1><p>Envios do time, individuais e em massa, com abertura e clique. As respostas chegam em Recebidos e na linha do tempo do lead.</p></div>
         {aba === 'modelos' && <button className="btn primario" onClick={() => setEditar({ ativo: true, categoria: 'comercial' })}>Novo modelo</button>}
       </div>
       <div className="abas">
+        <button className={aba === 'recebidos' ? 'ativa' : ''} onClick={() => setAba('recebidos')}>Recebidos{(recebidos ?? []).filter((r) => situacao(r).nome === 'Aguardando resposta' && r.responsavel === perfil?.id).length > 0 && <Selo cor="vermelho">{(recebidos ?? []).filter((r) => situacao(r).nome === 'Aguardando resposta' && r.responsavel === perfil?.id).length}</Selo>}</button>
         <button className={aba === 'enviados' ? 'ativa' : ''} onClick={() => setAba('enviados')}>Enviados</button>
         <button className={aba === 'disparos' ? 'ativa' : ''} onClick={() => setAba('disparos')}>Disparos</button>
         <button className={aba === 'modelos' ? 'ativa' : ''} onClick={() => setAba('modelos')}>Modelos</button>
       </div>
 
-      {aba === 'disparos' ? (
+      {aba === 'recebidos' ? (
+        semTabela ? <div className="aviso" style={{ marginTop: 12 }}>Falta rodar a migração 0008 (emails_recebidos) no Supabase para as respostas aparecerem aqui.</div> : (
+          <>
+            <div style={{ display: 'flex', gap: 6, margin: '12px 0', flexWrap: 'wrap' }}>
+              {([['meus', 'Minhas, aguardando'], ['pendentes', 'Todas aguardando'], ['todos', 'Tudo']] as const).map(([k, n]) => (
+                <button key={k} className={`btn pequeno${filtroR === k ? ' primario' : ''}`} onClick={() => setFiltroR(k)}>{n}</button>
+              ))}
+            </div>
+            {(() => {
+              const lista = (recebidos ?? []).filter((r) => filtroR === 'todos' ? true
+                : situacao(r).nome === 'Aguardando resposta' && (filtroR === 'pendentes' || r.responsavel === perfil?.id));
+              if (!lista.length) return <Vazio>{filtroR === 'todos' ? 'Nenhuma resposta recebida ainda. Quando alguém responder um e-mail enviado pelo CRM, ela aparece aqui.' : 'Nenhuma resposta esperando. 🎉'}</Vazio>;
+              return (
+                <div className="tabela-envolve">
+                  <table className="tabela">
+                    <thead><tr><th>De</th><th>Assunto</th><th>Situação</th><th>Com</th><th className="num">Chegou</th><th /></tr></thead>
+                    <tbody>
+                      {lista.map((r) => {
+                        const s = situacao(r), link = linkRecebido(r);
+                        return (
+                          <tr key={r.id}>
+                            <td>{link ? <Link to={link}>{r.de_nome || r.de}</Link> : (r.de_nome || r.de)}{r.de_nome && <div className="muted">{r.de}</div>}</td>
+                            <td style={{ maxWidth: 420 }}>
+                              <button type="button" className="link" style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'inherit' }}
+                                onClick={() => setAberto(aberto === r.id ? null : r.id)} aria-expanded={aberto === r.id}><strong>{r.assunto || '(sem assunto)'}</strong></button>
+                              <div className="muted" style={{ whiteSpace: aberto === r.id ? 'pre-wrap' : undefined, overflow: 'hidden', textOverflow: 'ellipsis', maxHeight: aberto === r.id ? undefined : 40 }}>
+                                {r.resposta}
+                              </div>
+                              {r.anexos?.length > 0 && <div className="muted">📎 {r.anexos.map((x) => x.nome).join(', ')} (foram no aviso por e-mail)</div>}
+                            </td>
+                            <td><Selo cor={s.cor}>{s.nome}</Selo></td>
+                            <td>{time.find((p) => p.id === r.responsavel)?.nome ?? '—'}</td>
+                            <td className="num">{dataHora(r.recebido_em)}</td>
+                            <td style={{ whiteSpace: 'nowrap' }}>
+                              {!r.respondido_em && <button className="btn pequeno primario" onClick={() => setResponder(destinoResposta(r))}>Responder</button>}{' '}
+                              {!r.respondido_em && <button className="btn pequeno" disabled={ocupado} onClick={() => arquivar(r)}>{r.arquivado_em ? 'Desarquivar' : 'Arquivar'}</button>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
+          </>
+        )
+      ) : aba === 'disparos' ? (
         !disparos ? <Carregando /> : disparos.length === 0
           ? <Vazio>Nenhum disparo ainda. Em Leads, marque as pessoas (por exemplo, filtre por Nutrição e marque todas) e clique em “Enviar e-mail”.</Vazio>
           : (
@@ -157,6 +222,7 @@ export default function Emails() {
         </div>
       )}
 
+      <EnviarEmail destino={responder} fechar={() => setResponder(null)} enviado={carregar} />
       <Modal titulo={editar?.id ? 'Editar modelo' : 'Novo modelo'} aberto={!!editar} fechar={() => setEditar(null)} largura={720}
         rodape={<><button className="btn" onClick={() => setEditar(null)}>Cancelar</button><button className="btn primario" disabled={ocupado} onClick={salvar}>Salvar</button></>}>
         {editar && (
